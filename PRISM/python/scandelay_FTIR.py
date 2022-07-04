@@ -351,6 +351,10 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
                          order=1,refresh_alignment=True,
                          flattening_order=20,Nwavelengths=20):
 
+    global dX
+    from common import numerical_recipes as numrec
+    Nx=50
+
     Ncycles = len(intfgs_arr) // 2
 
     all_xs = []
@@ -366,6 +370,10 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
 
         all_xs = np.append(all_xs, xs)
         all_ys = np.append(all_ys, ys)
+
+    x1 = np.min(all_xs)
+    x2 = np.max(all_xs)
+    if dX is None: dX = x2 - x1
 
     def shifted_intfg(shift):
 
@@ -384,6 +392,11 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
 
     shift = shifts[np.argmax(sums)]
     xnew, intfg_new = shifted_intfg(shift)
+
+    intfg_interp = interp1d(x=xnew,y=intfg_new,
+                            **interp_kwargs)
+    xnew=np.linspace(x1,x1+dX,len(xnew))
+    intfg_new = intfg_interp(xnew)
 
     return np.array([intfg_new,xnew])
 
