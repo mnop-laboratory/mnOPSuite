@@ -19,13 +19,9 @@ def test(intfgms_arr, delay_calibration_factor=1,
                          order=1,refresh_alignment=True,
                          flattening_order=20,Nwavelengths=4):
 
-    global IA
     import traceback
-
-    IA = InterferogramAligner( intfgms_arr,
-                               flattening_order=flattening_order)
     try:
-        y,x = IA(order=order,refresh_alignment=refresh_alignment,Nwavelengths=Nwavelengths)
+        result = align_interferograms(intfgms_arr)
         return str(1)
 
     except:
@@ -252,7 +248,7 @@ class InterferogramAligner(object):
 
         return intfg_aligned, self.xs
 
-def align_interferograms(intfgms_arr, delay_calibration_factor=1,
+def align_interferograms_old(intfgms_arr, delay_calibration_factor=1,
                          order=1,refresh_alignment=True,
                          flattening_order=20,Nwavelengths=20):
 
@@ -265,6 +261,91 @@ def align_interferograms(intfgms_arr, delay_calibration_factor=1,
 
     return np.array([y,x])
 
+def align_interferograms(intfgms_arr, delay_calibration_factor=1,
+                         order=1,refresh_alignment=True,
+                         flattening_order=20,Nwavelengths=20):
+
+
+    from scipy.optimize import leastsq, minimize
+    from scipy.interpolate import interp1d
+    from common import numerical_recipes as numrec
+    import time
+
+    global dX
+    Nx = 100
+
+    Ncycles = len(intfgms_arr) // 2
+    #Ncycles = np.min((20,Ncycles))
+    Nintfgms = Ncycles * 2
+
+    all_xs = []
+    all_intfg_interps = []
+    for i in range(Ncycles):
+        ys, xs = np.array(intfgms_arr[2 * i:2 * (i + 1)])
+        N = len(xs)
+
+        # fwd:
+        x = xs[:int(N // 2)]
+        y = ys[:int(N // 2)]
+        x = numrec.smooth(x, window_len=Nx, axis=0)
+        x,y=zip(*sorted(zip(x,y)))
+        x=np.array(x); y=np.array(y)
+        all_xs.append(x)
+        y-=np.polyval(np.polyfit(x=x,y=y,deg=flattening_order),x)
+        all_intfg_interps.append(interp1d(x=x, y=y, **interp_kwargs))
+        # bwd
+        # x = xs[int(N // 2):]
+        # y = ys[int(N // 2):]
+        # all_xs.append(x); all_intfgs.append(y)
+
+    x1 = np.min(all_xs)
+    x2 = np.max(all_xs)
+    if dX is None: dX = x2-x1
+
+    def get_dx(x):
+
+        wl = 2 * dX
+        return np.sin(2 * np.pi * (x - x1) / wl)
+
+    def get_intfg_shifted(rs):
+
+        intfgs_shifted = []
+        for r, x, intfg_interp in zip(rs, all_xs, all_intfg_interps):
+            dx = get_dx(x)
+            intfg_rolled = intfg_interp(x + r * dx)
+            intfgs_shifted.append(intfg_rolled)
+
+        return np.mean(intfgs_shifted, axis=0)
+
+    def get_x_shifted(rs):
+
+        xs_shifted = []
+        for r, x in zip(rs, all_xs):
+            dx = get_dx(x)
+            xs_shifted.append(x + r * dx)
+
+        return np.mean(xs_shifted, axis=0)
+
+    def to_minimize(rs):
+
+        intfg_shifted = get_intfg_shifted(rs)
+
+        return -np.sum(intfg_shifted ** 2)
+
+    t=time.time()
+    rs = minimize(to_minimize, [0] * Nintfgms,
+                  bounds=[(-.01, .01)] * Nintfgms,
+                  tol=1).x
+    print('Time elapsed:',time.time()-t)
+    intfg = get_intfg_shifted(rs)
+    x = get_x_shifted(rs)
+
+    interp = interp1d(x=x,y=intfg,**interp_kwargs)
+    xnew=np.linspace(x1,x1+dX,len(x))
+    intfg = interp(xnew)
+    xnew*=delay_calibration_factor
+
+    return np.array([intfg,xnew])
 
 
 def spectral_envelope(f,A,f0,df,expand_envelope=1):
@@ -274,7 +355,7 @@ def spectral_envelope(f,A,f0,df,expand_envelope=1):
 
     return A*e #maximum value will always be `A`
 
-def fit_envelope(f,sabs,fmin=400,fmax=4000):
+def fit_envelope(f,sabs,fmin=400,fmax=3500):
 
     global result
     sub=(f>=fmin)*(f<=fmax)
