@@ -261,7 +261,7 @@ def align_interferograms_old(intfgms_arr, delay_calibration_factor=1,
 
     return np.array([y,x])
 
-def align_interferograms(intfgms_arr, delay_calibration_factor=1,
+def align_interferograms_recent(intfgms_arr, delay_calibration_factor=1,
                          order=1,refresh_alignment=True,
                          flattening_order=20,Nwavelengths=20):
 
@@ -347,6 +347,45 @@ def align_interferograms(intfgms_arr, delay_calibration_factor=1,
 
     return np.array([intfg,xnew])
 
+def align_interferograms(intfgs_arr, delay_calibration_factor=1,
+                         order=1,refresh_alignment=True,
+                         flattening_order=20,Nwavelengths=20):
+
+    Ncycles = len(intfgs_arr) // 2
+
+    all_xs = []
+    all_ys = []
+    for i in range(Ncycles):
+        # i=i+10
+        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1)])
+        Nbins = len(xs)
+
+        xs *= delay_calibration_factor
+        xs = numrec.smooth(xs, window_len=Nx, axis=0)
+        ys -= np.polyval(np.polyfit(x=xs, y=ys, deg=flattening_order), xs)
+
+        all_xs = np.append(all_xs, xs)
+        all_ys = np.append(all_ys, ys)
+
+    def shifted_intfg(shift):
+
+        all_xs_rolled = np.roll(all_xs, shift, axis=0)
+        result = binned_statistic(all_xs_rolled, all_ys, bins=Nbins)
+        xnew = result.bin_edges[:-1]
+        intfg_new = result.statistic
+
+        return xnew, intfg_new
+
+    shifts = np.arange(-30, 30, 1)
+    sums = []
+    for shift in shifts:
+        xnew, intfg_new = shifted_intfg(shift)
+        sums.append(np.sum(intfg_new ** 2))
+
+    shift = shifts[np.argmax(sums)]
+    xnew, intfg_new = shifted_intfg(shift)
+
+    return np.array([intfg_new,xnew])
 
 def spectral_envelope(f,A,f0,df,expand_envelope=1):
 
