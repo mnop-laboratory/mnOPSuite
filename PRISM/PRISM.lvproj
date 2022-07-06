@@ -82,7 +82,7 @@
 		</Item>
 		<Item Name="NewportFlipper.vi" Type="VI" URL="../../Peripherals/NewportFlipper.vi"/>
 		<Item Name="PRISM_RasterScan.vi" Type="VI" URL="../PRISM_RasterScan.vi"/>
-		<Item Name="python_test.vi" Type="VI" URL="../python_test.vi"/>
+		<Item Name="python_test.vi" Type="VI" URL="../Diagnostic/python_test.vi"/>
 		<Item Name="ScanDelay_FTIR_AcquireInterferogram.vi" Type="VI" URL="../ScanDelay_FTIR_AcquireInterferogram.vi"/>
 		<Item Name="ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi" Type="VI" URL="../ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi"/>
 		<Item Name="ScanDelay_FTIR_BBnorm.vi" Type="VI" URL="../ScanDelay_FTIR_BBnorm.vi"/>

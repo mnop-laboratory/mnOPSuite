@@ -82,274 +82,10 @@ def weighted_average(a1, a2, w1, w2):
 
     return np.array([yavg, x1])
 
-class InterferogramAligner(object):
-
-    alignment_p_filepath = os.path.join(basedir,"alignment_ps.txt")
-
-    def regularized_intfg(self, intfgms_arr, fwd=True, flattening_order=20):
-
-        assert len(intfgms_arr) % 2 == 0
-        Nintfgms = len(intfgms_arr) // 2
-
-        all_xs = []
-        all_ys = []
-        for i in range(Nintfgms):
-            y, x = np.array(intfgms_arr[2 * i:2 * i + 2])
-            N = len(x)
-
-            if fwd:
-                x = x[:int(N // 2)]
-                y = y[:int(N // 2)]
-            else:
-                x = x[int(N // 2):]
-                y = y[int(N // 2):]
-
-            where_valid = (x != 0) * np.isfinite(x) * np.isfinite(y)
-            all_xs += list(x[where_valid])
-            all_ys += list(y[where_valid])
-
-        self.xmin=np.min(all_xs)
-        self.xmin=np.max(all_xs)
-        stat = binned_statistic(all_xs, all_ys,
-                                statistic='mean',
-                                bins=len(all_xs) // Nintfgms,
-                                range=(np.min(all_xs), np.max(all_xs)))
-
-        ynew = stat.statistic
-        xnew = stat.bin_edges[:-1]
-        keep = np.isfinite(ynew)
-        ynew = ynew[keep]
-        xnew = xnew[keep]
-
-        p = np.polyfit(x=xnew, y=ynew, deg=flattening_order)
-        ynew -= np.polyval(x=xnew, p=p)
-
-        return ynew, xnew
-
-    def __init__(self, intfgms_arr,refresh_alignment=True,
-                 flattening_order=20):
-
-        # If we are using `aligning` VIs, then the interferogram duration (frequency resolution)
-        #  will be set for the duration of execution right here at the first instantiation of this class
-        global dX
-        try:
-            if refresh_alignment: raise ValueError
-            elif not os.path.exists(self.alignment_p_filepath): raise ValueError
-            else:
-                dat=np.loadtxt(self.alignment_p_filepath)
-                self.alignment_p=dat[-1]
-        except: self.alignment_p=None
-
-        intfg_fwd, x_fwd = self.regularized_intfg(intfgms_arr, fwd=True,
-                                                  flattening_order=flattening_order)
-        self.interp_fwd = interp1d(x=x_fwd, y=intfg_fwd, **interp_kwargs)
-        intfg_bwd, x_bwd = self.regularized_intfg(intfgms_arr, fwd=False,
-                                                  flattening_order=flattening_order)
-        self.interp_bwd = interp1d(x=x_bwd, y=intfg_bwd, **interp_kwargs)
-
-        self.xmin = np.max( (np.min(x_fwd),np.min(x_bwd)) )
-        if dX is not None:
-            self.xmax = self.xmin + dX
-        else:
-            self.xmax = np.min((np.max(x_fwd), np.max(x_bwd)))
-            dX = self.xmax - self.xmin
-
-        Nx = np.mean((len(x_fwd), len(x_bwd)))
-        p = 1
-        while 2 ** p < Nx: p += 1
-        Nx = 2 ** (p-1)
-        self.xs = np.linspace(self.xmin, self.xmax, Nx)
-        self.intfg_fwd = self.interp_fwd(self.xs)
-        self.intfg_bwd = self.interp_bwd(self.xs)
-
-    def get_env(self, interferogram, Nwavelengths=10):  # smooth over `Nwavelengths`
-
-        if False in [hasattr(self, attr) for attr in ('Nx', 'w', 'fs')]:
-            self.Nx = len(self.xs)
-            self.w = np.blackman(self.Nx)
-            self.fs = np.fft.fftfreq(self.Nx)
-
-        interferogram = np.array(interferogram)
-        self.interferogram = interferogram
-        s = np.abs(np.fft.fft(interferogram * self.w))
-        self.s = s
-        self.f0 = np.abs(self.fs[np.argmax(s)])  # in case we pick up a negative frequency, doesnt matter
-
-        inds = np.arange(self.Nx)
-        self.sw = np.exp(1j * 2 * np.pi * self.f0 * inds)
-        window_len = 2 * np.pi / (self.f0) * Nwavelengths
-        window = np.blackman(window_len)
-        interferogram_env = convolve(interferogram * self.sw,
-                                     window, mode='same')
-
-        return interferogram_env
-
-    alignment_p=None
-
-    def __call__(self, order=2, refresh_alignment=True, Nwavelengths=10, **kwargs):
-
-        x = self.xs
-
-        self.env_fwd = np.abs(self.get_env(self.intfg_fwd, Nwavelengths=Nwavelengths))
-        self.env_bwd = np.abs(self.get_env(self.intfg_bwd, Nwavelengths=Nwavelengths))
-
-        interp_env_fwd = interp1d(x=x, y=self.env_fwd, **interp_kwargs)
-        interp_env_bwd = interp1d(x=x, y=self.env_bwd, **interp_kwargs)
-
-        interp_fwd = interp1d(x=x, y=self.intfg_fwd, **interp_kwargs)
-        interp_bwd = interp1d(x=x, y=self.intfg_bwd, **interp_kwargs)
-
-        wl = 2 * (self.xmax - self.xmin)
-        self.sws = [np.sin(2 * np.pi * (2*i + 1) * (x - self.xmin) / wl) for i in range(order)]
-
-        p0 = (0,) * order
-
-        def get_dx(p):
-            xp = 0
-            for i, P in enumerate(p):
-                xp = xp + P * self.sws[i]
-
-            return xp
-
-        self.get_dx = get_dx
-
-        def to_minimize(p, env=True):
-            dx = get_dx(p)
-            self.xp_fwd = x - dx
-            self.xp_bwd = x + dx
-
-            if env:
-                fwd_p = interp_env_fwd(self.xp_fwd)
-                bwd_p = interp_env_bwd(self.xp_bwd)
-            else:
-                fwd_p = interp_fwd(self.xp_fwd)
-                bwd_p = interp_bwd(self.xp_bwd)
-
-            return fwd_p - bwd_p
-
-        # find alignment fit if necessary
-        if self.alignment_p is None or refresh_alignment:
-            # Perform no fit
-            if order == 0:
-                self.alignment_p = p0
-            # Perform fit
-            else:
-                self.alignment_p = leastsq(to_minimize, p0, args=(True,))[0]  # align env
-                self.alignment_p = leastsq(to_minimize, self.alignment_p, args=(False,))[0]  # align intfg
-                # Record the result of the alignment fit
-                with open(self.alignment_p_filepath, "a") as myfile:
-                    myfile.write('%s\n' % str(self.alignment_p))
-        dx = get_dx(self.alignment_p)
-
-        self.intfg_fwd_aligned = interp_fwd(x - dx)
-        self.intfg_bwd_aligned = interp_bwd(x + dx)
-        intfg_aligned = np.mean((self.intfg_fwd_aligned,
-                                 self.intfg_bwd_aligned), axis=0)
-
-        return intfg_aligned, self.xs
-
-def align_interferograms_old(intfgms_arr, delay_calibration_factor=1,
-                         order=1,refresh_alignment=True,
-                         flattening_order=20,Nwavelengths=20):
-
-    global IA
-    IA = InterferogramAligner( intfgms_arr,
-                               flattening_order=flattening_order)
-    y,x = IA(order=order,refresh_alignment=refresh_alignment,Nwavelengths=Nwavelengths)
-
-    x = x*delay_calibration_factor
-
-    return np.array([y,x])
-
-def align_interferograms_recent(intfgms_arr, delay_calibration_factor=1,
-                         order=1,refresh_alignment=True,
-                         flattening_order=20,Nwavelengths=20):
-
-
-    from scipy.optimize import leastsq, minimize
-    from scipy.interpolate import interp1d
-    from common import numerical_recipes as numrec
-    import time
-
-    global dX
-    Nx = 100
-
-    Ncycles = len(intfgms_arr) // 2
-    #Ncycles = np.min((20,Ncycles))
-    Nintfgms = Ncycles * 2
-
-    all_xs = []
-    all_intfg_interps = []
-    for i in range(Ncycles):
-        ys, xs = np.array(intfgms_arr[2 * i:2 * (i + 1)])
-        N = len(xs)
-
-        # fwd:
-        x = xs[:int(N // 2)]
-        y = ys[:int(N // 2)]
-        x = numrec.smooth(x, window_len=Nx, axis=0)
-        x,y=zip(*sorted(zip(x,y)))
-        x=np.array(x); y=np.array(y)
-        all_xs.append(x)
-        y-=np.polyval(np.polyfit(x=x,y=y,deg=flattening_order),x)
-        all_intfg_interps.append(interp1d(x=x, y=y, **interp_kwargs))
-        # bwd
-        # x = xs[int(N // 2):]
-        # y = ys[int(N // 2):]
-        # all_xs.append(x); all_intfgs.append(y)
-
-    x1 = np.min(all_xs)
-    x2 = np.max(all_xs)
-    if dX is None: dX = x2-x1
-
-    def get_dx(x):
-
-        wl = 2 * dX
-        return np.sin(2 * np.pi * (x - x1) / wl)
-
-    def get_intfg_shifted(rs):
-
-        intfgs_shifted = []
-        for r, x, intfg_interp in zip(rs, all_xs, all_intfg_interps):
-            dx = get_dx(x)
-            intfg_rolled = intfg_interp(x + r * dx)
-            intfgs_shifted.append(intfg_rolled)
-
-        return np.mean(intfgs_shifted, axis=0)
-
-    def get_x_shifted(rs):
-
-        xs_shifted = []
-        for r, x in zip(rs, all_xs):
-            dx = get_dx(x)
-            xs_shifted.append(x + r * dx)
-
-        return np.mean(xs_shifted, axis=0)
-
-    def to_minimize(rs):
-
-        intfg_shifted = get_intfg_shifted(rs)
-
-        return -np.sum(intfg_shifted ** 2)
-
-    t=time.time()
-    rs = minimize(to_minimize, [0] * Nintfgms,
-                  bounds=[(-.01, .01)] * Nintfgms,
-                  tol=1).x
-    print('Time elapsed:',time.time()-t)
-    intfg = get_intfg_shifted(rs)
-    x = get_x_shifted(rs)
-
-    interp = interp1d(x=x,y=intfg,**interp_kwargs)
-    xnew=np.linspace(x1,x1+dX,len(x))
-    intfg = interp(xnew)
-    xnew*=delay_calibration_factor
-
-    return np.array([intfg,xnew])
-
 def align_interferograms(intfgs_arr, delay_calibration_factor=1,
-                         order=1,refresh_alignment=True,
-                         flattening_order=20,Nwavelengths=20):
+                         delay0=12,optimize_delay=True,delay_range=15,
+                         flattening_order=20):
+    #At a scan rate of 250kHz, a 12-point delay corresponds to only about 50 microseconds
 
     global dX
     from common import numerical_recipes as numrec
@@ -375,23 +111,33 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
     x2 = np.max(all_xs)
     if dX is None: dX = x2 - x1
 
-    def shifted_intfg(shift):
+    def delayed_intfg(delay):
 
-        all_xs_rolled = np.roll(all_xs, shift, axis=0)
+        #Assume positions are reported in delayed fashion;
+        # correct delay by rolling them backwards to correspond to earlier time points
+        all_xs_rolled = np.roll(all_xs, -delay, axis=0)
         result = binned_statistic(all_xs_rolled, all_ys, bins=Nbins)
         xnew = result.bin_edges[:-1]
         intfg_new = result.statistic
 
+        keep=np.isfinite(intfg_new)
+        xnew=xnew[keep]
+        intfg_new=intfg_new[keep]
+
         return xnew, intfg_new
 
-    shifts = np.arange(-30, 30, 1)
-    sums = []
-    for shift in shifts:
-        xnew, intfg_new = shifted_intfg(shift)
-        sums.append(np.sum(intfg_new ** 2))
+    #Scan over delays to find most ideal value
+    if optimize_delay:
+        delays = np.arange(int(delay0-delay_range),
+                           int(delay0+delay_range), 1)
+        sums = []
+        for delay in delays:
+            xnew, intfg_new = delayed_intfg(delay)
+            sums.append(np.sum(intfg_new ** 2))
 
-    shift = shifts[np.argmax(sums)]
-    xnew, intfg_new = shifted_intfg(shift)
+        delay0 = delays[np.argmax(sums)]
+
+    xnew, intfg_new = delayed_intfg(delay0)
 
     intfg_interp = interp1d(x=xnew,y=intfg_new,
                             **interp_kwargs)
