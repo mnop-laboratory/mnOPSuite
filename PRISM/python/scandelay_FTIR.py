@@ -85,7 +85,7 @@ def weighted_average(a1, a2, w1, w2):
 def align_interferograms(intfgs_arr, delay_calibration_factor=1,
                          delay0=12,optimize_delay=True,delay_range=15,
                          flattening_order=20):
-    #At a scan rate of 250kHz, a 12-point delay corresponds to only about 50 microseconds
+    #At a scan rate of 250kHz, a 12-point delay corresponds to only about 50 microseconds 
 
     global dX
     from common import numerical_recipes as numrec
