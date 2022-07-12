@@ -82,12 +82,19 @@ def weighted_average(a1, a2, w1, w2):
 
     return np.array([yavg, x1])
 
+best_delay=0
+
+def get_best_delay():
+
+    global best_delay
+    return best_delay
+
 def align_interferograms(intfgs_arr, delay_calibration_factor=1,
                          delay0=12,optimize_delay=True,delay_range=15,
                          flattening_order=20):
-    #At a scan rate of 250kHz, a 12-point delay corresponds to only about 50 microseconds 
+    #At a scan rate of 250kHz, a 12-point delay corresponds to only about 50 microseconds
 
-    global dX
+    global dX,best_delay
     from common import numerical_recipes as numrec
     Nx=50
 
@@ -136,6 +143,8 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
             sums.append(np.sum(intfg_new ** 2))
 
         delay0 = delays[np.argmax(sums)]
+
+    best_delay=delay0
 
     xnew, intfg_new = delayed_intfg(delay0)
 
@@ -202,7 +211,7 @@ def fourier_xform(a,tsubtract=0,envelope=True):
 
     # This applies knowledge that d does not start at zero, but min value is meaningful
     f = s.axes[0]
-    pcorr = -2 * np.pi * (np.min(d)) * f
+    pcorr = +2 * np.pi * (np.min(d)) * f
     s *= np.exp(1j * pcorr)
 
     posf=(f>0)
