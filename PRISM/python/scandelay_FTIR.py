@@ -90,25 +90,28 @@ def get_best_delay():
     return best_delay
 
 def align_interferograms(intfgs_arr, delay_calibration_factor=1,
-                         delay0=12,optimize_delay=True,delay_range=15,
+                         delay0=0,optimize_delay=True,delay_range=15,
                          flattening_order=20):
     #At a scan rate of 250kHz, a 12-point delay corresponds to only about 50 microseconds
 
     global dX,best_delay
     from common import numerical_recipes as numrec
-    Nx=50
 
+    intfgs_arr = np.array(intfgs_arr)
     Ncycles = len(intfgs_arr) // 2
+    Nsamples = intfgs_arr.shape[1]
+    x_smoothing = np.min((Nsamples/100,50))
 
     all_xs = []
     all_ys = []
     for i in range(Ncycles):
         # i=i+10
-        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1)])
+        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1),
+                                     :Nsamples//2])
         Nbins = len(xs)
 
         xs *= delay_calibration_factor
-        xs = numrec.smooth(xs, window_len=Nx, axis=0)
+        xs = numrec.smooth(xs, window_len=x_smoothing, axis=0)
         ys -= np.polyval(np.polyfit(x=xs, y=ys, deg=flattening_order), xs)
 
         all_xs = np.append(all_xs, xs)
@@ -121,8 +124,10 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
     def delayed_intfg(delay):
 
         #Assume positions are reported in delayed fashion;
-        # correct delay by rolling them backwards to correspond to earlier time points
-        all_xs_rolled = np.roll(all_xs, -delay, axis=0)
+        # a negative delay means the detector data precedes the x-position data
+        # apply the same shift to x-data to align with detector data
+        #  negative delay means roll x-data backwards to correspond to earlier time points
+        all_xs_rolled = np.roll(all_xs, +delay, axis=0)
         result = binned_statistic(all_xs_rolled, all_ys, bins=Nbins)
         xnew = result.bin_edges[:-1]
         intfg_new = result.statistic
@@ -154,6 +159,59 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
     intfg_new = intfg_interp(xnew)
 
     return np.array([intfg_new,xnew])
+
+def align_interferograms_fwd_bwd(intfgs_arr, delay_calibration_factor=1,
+                         delay0=0,optimize_delay=True,delay_range=15,
+                         flattening_order=20):
+    #At a scan rate of 250kHz, a 12-point delay corresponds to only about 50 microseconds
+
+    global dX,best_delay,bins,idx,x_smoothing
+    from common import numerical_recipes as numrec
+
+    intfgs_arr = np.array(intfgs_arr)
+    Ncycles = len(intfgs_arr) // 2
+    Nsamples = intfgs_arr.shape[1]
+    x_smoothing = np.min((Nsamples/100,50))
+
+    all_xs_fwd = []
+    all_ys_fwd = []
+    all_xs_bwd = []
+    all_ys_bwd = []
+    for i in range(Ncycles):
+        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1)])
+        Nbins = len(xs)
+
+        xs = numrec.smooth(xs, window_len=x_smoothing, axis=0)
+        if i==0:
+            idx = np.argmax(xs) #This is where we switch from forward to backward scan
+            Nbins = idx
+        ys -= np.polyval(np.polyfit(x=xs, y=ys, deg=flattening_order), xs)
+
+        xs *= delay_calibration_factor
+
+        all_xs_fwd = np.append(all_xs_fwd, xs[:idx])
+        all_ys_fwd = np.append(all_ys_fwd, ys[:idx])
+
+        all_xs_bwd = np.append(all_xs_bwd, xs[idx:])
+        all_ys_bwd = np.append(all_ys_bwd, ys[idx:])
+
+    x1 = np.min(all_xs_fwd)
+    x2 = np.max(all_xs_fwd)
+    if dX is None: dX = x2 - x1
+    bins=np.linspace(x1,x2,Nbins)
+
+    result = binned_statistic(all_xs_fwd, all_ys_fwd, bins=bins)
+    intfg_x_fwd = result.bin_edges[:-1]
+    intfg_y_fwd = result.statistic
+    intfg_y_fwd[~np.isfinite(intfg_y_fwd)]=0
+
+    result = binned_statistic(all_xs_bwd, all_ys_bwd, bins=bins)
+    intfg_x_bwd = result.bin_edges[:-1]
+    intfg_y_bwd = result.statistic
+    intfg_y_bwd[~np.isfinite(intfg_y_bwd)]=0
+
+    return np.array([intfg_y_fwd,intfg_x_fwd,
+                     intfg_y_bwd,intfg_x_bwd])
 
 def spectral_envelope(f,A,f0,df,expand_envelope=1):
 
@@ -216,6 +274,7 @@ def fourier_xform(a,tsubtract=0,envelope=True):
 
     posf=(f>0)
     pvf=np.angle(s)[posf]
+    pvf = (pvf+np.pi)%(2*np.pi)-np.pi #This modulo's the phase to closest interval near 0
     sabs=np.abs(s)[posf]
     f=f[posf]
 
@@ -224,10 +283,63 @@ def fourier_xform(a,tsubtract=0,envelope=True):
     Nf=len(f); Ne=len(envelope_params)
     if Ne<Nf: envelope_params=np.append(envelope_params,[0]*(Nf-Ne))
 
-    # this will apply the knowledge that distance is not zero at first index of spectrum
-    pcorr = -2 * np.pi * (np.min(d)) * f
-    pvf += pcorr
-    pvf = (pvf+np.pi)%(2*np.pi)-np.pi
+    assert len(f)==len(sabs)==len(pvf)==len(env)
+
+    return np.array([f,sabs,pvf,env,envelope_params])
+
+def fourier_xform_fwd_bwd(a,tsubtract=0,envelope=True):
+
+    v1,t1,v2,t2=np.array(a)
+    c=3e8 #speed of light in m/s
+
+    pairs = [(v1,t1),
+             (v2,t2)]
+    ss=[]
+    for i in range(2):
+        v,t = pairs[i]
+        t=t-tsubtract #subtract a time correction in ps
+        t*=1e-12 #ps in seconds
+        d=t*c*2 #distance in m
+        d*=1e2 #distance in cm
+
+        v = v-np.mean(v)
+        w = np.blackman(len(v))
+        wmax_ind = np.argmax(w)
+        centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
+        imax_ind = np.argmin((centerd - d) ** 2)
+        w = np.roll(w, imax_ind - wmax_ind, axis=0)
+        #w = 1 #We are disabling the windowing for now
+
+        v *= w
+        v = AWA(v, axes=[d])
+        s = num.Spectrum(v, axis=0)
+
+        # This applies knowledge that d does not start at zero, but min value is meaningful
+        f = s.axes[0]
+        pcorr = +2 * np.pi * (np.min(d)) * f
+        s *= np.exp(1j * pcorr)
+
+        ss.append(s)
+
+    #-- Interpolate the fwd/bwd spectra to share frequency channels
+    s1,s2=ss
+    f1=s1.axes[0]
+    s2 = s1.interpolate_axis(f1,axis=0,**interp_kwargs)
+    s1abs,s2abs = np.abs(s1),np.abs(s2)
+    p1,p2 = np.unwrap(np.angle(s1)),np.unwrap(np.angle(s2))
+    pvf = (p1*s1abs+p2*s2abs)/(s1abs+s2abs) # weighted average phase
+    sabs = (np.abs(s1)+np.abs(s2))/2.
+
+    posf=(f>0)
+    pvf=pvf[posf]
+    pvf = (pvf+np.pi)%(2*np.pi)-np.pi #This modulo's the phase to closest interval near 0
+    sabs=sabs[posf]
+    f=f[posf]
+
+    if envelope: env,envelope_params = fit_envelope(f,sabs)
+    else: env=[1]*len(f); envelope_params=[0]
+    Nf=len(f); Ne=len(envelope_params)
+    if Ne<Nf: envelope_params=np.append(envelope_params,[0]*(Nf-Ne))
 
     assert len(f)==len(sabs)==len(pvf)==len(env)
 
@@ -447,23 +559,34 @@ class SpectralProcessor(object):
         return np.exp(1j * f * p) * s
 
     @staticmethod
-    def level_phase(f, s, order=1):
+    def level_phase(f, s, order=1, manual_offset=0):
 
         p = np.unwrap(np.angle(s))
-        m = np.polyfit(x=f, y=p, deg=order)
-        # m[-1]=0 #no overall phase offsets
+        m = np.polyfit(x=f, y=p, deg=order, w=np.abs(s)**2)
+        m[-1]=0 #no overall phase offsets
         p -= np.polyval(m, f)
+
+        if manual_offset:
+            p += manual_offset * f/np.mean(np.abs(f))
 
         return np.abs(s) * np.exp(1j * p)
 
     @classmethod
     def get_phase(cls,f,s,
-                  level_phase=True,order=1):
+                  level_phase=True,order=1,
+                  manual_offset=0):
 
         if level_phase:
-            s=cls.level_phase(f,s,order=order)
+            s=cls.level_phase(f,s,order=order,
+                              manual_offset=manual_offset)
 
-        return np.unwrap(np.angle(s))
+        p = np.unwrap(np.angle(s))
+
+        #Remove as many factors of 2*pi so that greatest intensity region is closest to zero
+        pavg = np.sum(p*np.abs(s)**2) / np.sum(np.abs(s)**2)
+        p -= 2*np.pi * np.round(pavg/(2*np.pi))
+
+        return p
 
     @classmethod
     def pair_difference(cls,ps, f, spectrum, spectrum0, exp=1):  # shift spectrum to match spectrum0
@@ -751,7 +874,7 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                        ref_spectra, ref_BB_spectra,
                        apply_envelope=True, envelope_width=1,
                        optimize_BB=True, optimize_phase=True,
-                       valid_thresh=.01):
+                       phase_offset=0,valid_thresh=.01):
 
     SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
                            ref_spectra, ref_BB_spectra)
@@ -762,10 +885,12 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                           optimize_phase=optimize_phase,
                           view_phase_alignment=False)
 
+    phase=SP.get_phase(f, snorm, level_phase=True, manual_offset=phase_offset)
+
     # `get_phase` will apply some phase leveling
     return np.array([f,
                      snorm_abs,
-                     SP.get_phase(f, snorm, level_phase=True)])
+                     phase])
 
 
 ############

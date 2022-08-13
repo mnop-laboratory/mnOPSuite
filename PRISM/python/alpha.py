@@ -90,6 +90,8 @@ def pump_generator(wns=(600,1000,1200,1400,1600,1800),
 
 def wn_to_wl(wn): return np.round(1e7/wn)
 
+pumpmax=100
+
 def set_replicator_table(wavelengths=None,wns=None,pumps=None):
 
     assert wavelengths is not None or wns is not None
@@ -137,7 +139,7 @@ def touchup_replicator_table(N,pumps=None,optimize=True):
     else: setpump=False
 
     try:
-        for i in range(20):
+        for i in range(N):
 
             print('Touching up replication i=%i' % i)
 
