@@ -3,7 +3,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 from common import numerics as num
 from common.baseclasses import AWA
-from scipy.signal import fftconvolve as convolve
+from common import numerical_recipes as numrec
 from scipy.stats import binned_statistic
 from scipy.optimize import leastsq,minimize
 
@@ -91,7 +91,7 @@ def get_best_delay():
 
 def align_interferograms(intfgs_arr, delay_calibration_factor=1,
                          delay0=0,optimize_delay=True,delay_range=15,
-                         flattening_order=20):
+                         flattening_order=20, noise=0):
     #At a scan rate of 250kHz, a 12-point delay corresponds to only about 50 microseconds
 
     global dX,best_delay
@@ -106,13 +106,13 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
     all_ys = []
     for i in range(Ncycles):
         # i=i+10
-        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1),
-                                     :Nsamples//2])
-        Nbins = len(xs)
+        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1)])
+        if i==0: Nbins = len(xs)
 
         xs *= delay_calibration_factor
         xs = numrec.smooth(xs, window_len=x_smoothing, axis=0)
         ys -= np.polyval(np.polyfit(x=xs, y=ys, deg=flattening_order), xs)
+        if noise: ys+=noise*np.random.randn(len(ys))*(ys.max()-ys.min())/2
 
         all_xs = np.append(all_xs, xs)
         all_ys = np.append(all_ys, ys)
@@ -150,6 +150,7 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
         delay0 = delays[np.argmax(sums)]
 
     best_delay=delay0
+    print('Optimal shift:',delay0)
 
     xnew, intfg_new = delayed_intfg(delay0)
 
@@ -160,9 +161,174 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
 
     return np.array([intfg_new,xnew])
 
+def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
+                         shift0=0,optimize_shift=True,shift_range=15,
+                         flattening_order=20,noise=0):
+
+    global dX
+
+    Ncycles = len(intfgs_arr) // 2
+    Nsamples = intfgs_arr.shape[1]
+    x_smoothing = np.min((Nsamples / 100, 50))
+
+    # --- Process data
+    all_xs_fwd = []
+    all_ys_fwd = []
+    all_xs_bwd = []
+    all_ys_bwd = []
+    all_xs = []
+    all_ys = []
+    for i in range(Ncycles):
+        # i=i+10
+        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1)])
+
+        xs *= delay_calibration_factor
+        xs = numrec.smooth(xs, window_len=x_smoothing, axis=0)
+
+        ys += noise * np.random.randn(len(ys)) * (ys.max() - ys.min()) / 2
+        ys -= np.polyval(np.polyfit(x=xs, y=ys, deg=flattening_order), xs)
+
+        if i == 0:
+            Nbins = len(xs)
+            idx_turn = np.argmax(xs)
+
+        all_xs_fwd.append(xs[:idx_turn])
+        all_ys_fwd.append(ys[:idx_turn])
+
+        all_xs_bwd.append(xs[idx_turn:])
+        all_ys_bwd.append(ys[idx_turn:])
+
+        all_xs.append(xs)
+        all_ys.append(ys)
+
+    # --- Get fwd/bwd interferograms
+    all_xs_fwd = np.array(all_xs_fwd)
+    all_xs_bwd = np.array(all_xs_bwd)
+    all_ys_fwd = np.array(all_ys_fwd)
+    all_ys_bwd = np.array(all_ys_bwd)
+    all_xs = np.array(all_xs).flatten()
+    all_ys = np.array(all_ys).flatten()
+
+    #--- Update the global x-range, if needed
+    x1 = np.min(all_xs)
+    x2 = np.max(all_xs)
+    if dX is None: dX = x2 - x1
+    xnew = np.linspace(x1, x1 + dX, Nbins)
+
+    #--- If we don't need to optimize, return what we need
+    def shifted_intfg(shift):
+
+        all_xs_rolled = np.roll(all_xs, shift, axis=0)
+        result = binned_statistic(all_xs_rolled, all_ys, bins=Nbins)
+        xnew = result.bin_edges[:-1]
+        intfg_new = result.statistic
+
+        keep = np.isfinite(intfg_new)
+        intfg_new[~keep] = 0
+
+        return xnew, intfg_new
+
+    if not optimize_shift:
+        x, intfg = shifted_intfg(shift0)
+
+        intfg_interp = interp1d(x=x, y=intfg,
+                                **interp_kwargs)
+        intfg_new = intfg_interp(xnew)
+
+        return np.array([intfg_new, xnew])
+
+    #--- Get fwd / bwd interferograms and their mutual overlap
+    result = binned_statistic(all_xs_fwd.flatten(),
+                              all_ys_fwd.flatten(),
+                              bins=Nbins)
+    x_fwd = result.bin_edges[:-1]
+    intfg_fwd = result.statistic
+    intfg_fwd[~np.isfinite(intfg_fwd)] = 0
+    intfg_fwd = AWA(intfg_fwd, axes=[x_fwd])
+
+    result = binned_statistic(all_xs_bwd.flatten(),
+                              all_ys_bwd.flatten(),
+                              bins=Nbins)
+    x_bwd = result.bin_edges[:-1]
+    intfg_bwd = result.statistic
+    intfg_bwd[~np.isfinite(intfg_bwd)] = 0
+    intfg_bwd = AWA(intfg_bwd, axes=[x_bwd])
+
+    xmin = np.max((np.min(x_fwd), np.min(x_bwd)))
+    xmax = np.min((np.max(x_fwd), np.max(x_bwd)))
+    xmutual = np.linspace(xmin, xmax, Nbins)
+    intfg_mutual_fwd = intfg_fwd.interpolate_axis(xmutual, axis=0)
+    intfg_mutual_bwd = intfg_bwd.interpolate_axis(xmutual, axis=0)
+
+    #--- Define some helper functions for identifying x-coordinate of interferograms
+    def get_dx(intfg_mutual_fwd, intfg_mutual_bwd, exp=4):
+
+        sf = num.Spectrum(intfg_mutual_fwd, axis=0)
+        sb = num.Spectrum(intfg_mutual_bwd, axis=0)
+        spow = np.abs(sf) ** exp + np.abs(sb) ** exp
+        keep = (spow >= spow.max() / 10) * (sf.axes[0] > 0)
+        norm = sf / sb
+        norm = numrec.smooth(norm, window_len=5, axis=0)
+        norm = norm[keep]
+        spow = spow[keep]
+        f, p = norm.axes[0], np.angle(norm)
+
+        p = np.polyfit(x=f, y=p, w=spow, deg=1)
+        dx = -p[0] / (2 * np.pi)
+
+        return dx
+
+    def get_x0(intfg_mutual_fwd, intfg_mutual_bwd, exp=2):
+
+        global intfg_fwd_fil, intfg_bwd_fil
+        x = intfg_mutual_fwd.axes[0]
+
+        intfg_fwd = intfg_mutual_fwd
+        intfg_bwd = intfg_mutual_bwd
+        w = np.abs(intfg_fwd) ** exp + np.abs(intfg_bwd) ** exp
+
+        x0 = np.sum(x * w) / np.sum(w)
+
+        return x0
+
+    #--- Find average characteristic index of x0_fwd vs x0_bwd = shift0
+    x0 = get_x0(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
+    print('x0:', x0)
+    dx = get_dx(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
+    print('Fwd/bwd dx separation:', dx)
+    x0_fwd = x0 + dx / 2
+    x0_bwd = x0 - dx / 2
+
+    dns = []
+    for xs_fwd in all_xs_fwd:
+        n2 = np.argmin(np.abs(xs_fwd - x0_fwd))
+        n1 = np.argmin(np.abs(xs_fwd - x0_bwd))
+        dns.append((n2 - n1) / 2.)
+
+    shift0 = np.int(np.round(np.mean(dns)))
+    print('Initially optimal shift:', shift0)
+
+    # -- Optimize around shift0
+    shifts = np.arange(-shift_range, shift_range, 1) + shift0
+    sums = []
+    for shift in shifts:
+        print(shift)
+        x, intfg = shifted_intfg(shift)
+        sums.append(np.sum(intfg ** 2))
+    shift0 = shifts[np.argmax(sums)]
+
+    print('Finally optimal shift:', shift0)
+    x, intfg = shifted_intfg(shift0)
+
+    intfg_interp = interp1d(x=x,y=intfg,
+                            **interp_kwargs)
+    intfg_new = intfg_interp(xnew)
+
+    return np.array([intfg_new,xnew])
+
 def align_interferograms_fwd_bwd(intfgs_arr, delay_calibration_factor=1,
                          delay0=0,optimize_delay=True,delay_range=15,
-                         flattening_order=20):
+                         flattening_order=20,noise=0):
     #At a scan rate of 250kHz, a 12-point delay corresponds to only about 50 microseconds
 
     global dX,best_delay,bins,idx,x_smoothing
@@ -177,15 +343,16 @@ def align_interferograms_fwd_bwd(intfgs_arr, delay_calibration_factor=1,
     all_ys_fwd = []
     all_xs_bwd = []
     all_ys_bwd = []
+    all_xs = []
     for i in range(Ncycles):
         ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1)])
-        Nbins = len(xs)
 
         xs = numrec.smooth(xs, window_len=x_smoothing, axis=0)
         if i==0:
             idx = np.argmax(xs) #This is where we switch from forward to backward scan
-            Nbins = idx
+            Nbins = len(xs)
         ys -= np.polyval(np.polyfit(x=xs, y=ys, deg=flattening_order), xs)
+        if noise: ys+=noise*np.random.randn(len(ys))*(ys.max()-ys.min())/2
 
         xs *= delay_calibration_factor
 
@@ -195,8 +362,10 @@ def align_interferograms_fwd_bwd(intfgs_arr, delay_calibration_factor=1,
         all_xs_bwd = np.append(all_xs_bwd, xs[idx:])
         all_ys_bwd = np.append(all_ys_bwd, ys[idx:])
 
-    x1 = np.min(all_xs_fwd)
-    x2 = np.max(all_xs_fwd)
+        all_xs = np.append(all_xs, xs)
+
+    x1 = np.min(all_xs)
+    x2 = np.max(all_xs)
     if dX is None: dX = x2 - x1
     bins=np.linspace(x1,x2,Nbins)
 
@@ -257,10 +426,10 @@ def fourier_xform(a,tsubtract=0,envelope=True):
 
     v = v-np.mean(v)
     w = np.blackman(len(v))
-    wmax_ind = np.argmax(w)
+    """wmax_ind = np.argmax(w)
     centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
     imax_ind = np.argmin((centerd - d) ** 2)
-    w = np.roll(w, imax_ind - wmax_ind, axis=0)
+    w = np.roll(w, imax_ind - wmax_ind, axis=0)"""
     #w = 1 #We are disabling the windowing for now
 
     v *= w
@@ -304,10 +473,10 @@ def fourier_xform_fwd_bwd(a,tsubtract=0,envelope=True):
 
         v = v-np.mean(v)
         w = np.blackman(len(v))
-        wmax_ind = np.argmax(w)
+        """wmax_ind = np.argmax(w)
         centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
         imax_ind = np.argmin((centerd - d) ** 2)
-        w = np.roll(w, imax_ind - wmax_ind, axis=0)
+        w = np.roll(w, imax_ind - wmax_ind, axis=0)"""
         #w = 1 #We are disabling the windowing for now
 
         v *= w
