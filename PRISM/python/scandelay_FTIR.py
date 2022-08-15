@@ -165,8 +165,9 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
                          shift0=0,optimize_shift=True,shift_range=15,
                          flattening_order=20,noise=0):
 
-    global dX
+    global dX,best_delay
 
+    intfgs_arr = np.array(intfgs_arr)
     Ncycles = len(intfgs_arr) // 2
     Nsamples = intfgs_arr.shape[1]
     x_smoothing = np.min((Nsamples / 100, 50))
@@ -180,7 +181,7 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
     all_ys = []
     for i in range(Ncycles):
         # i=i+10
-        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1)])
+        ys, xs = intfgs_arr[2 * i:2 * (i + 1)]
 
         xs *= delay_calibration_factor
         xs = numrec.smooth(xs, window_len=x_smoothing, axis=0)
@@ -229,6 +230,7 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
         return xnew, intfg_new
 
     if not optimize_shift:
+        best_delay = shift0
         x, intfg = shifted_intfg(shift0)
 
         intfg_interp = interp1d(x=x, y=intfg,
@@ -271,7 +273,7 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
         norm = numrec.smooth(norm, window_len=5, axis=0)
         norm = norm[keep]
         spow = spow[keep]
-        f, p = norm.axes[0], np.angle(norm)
+        f, p = norm.axes[0], np.unwrap(np.angle(norm))
 
         p = np.polyfit(x=f, y=p, w=spow, deg=1)
         dx = -p[0] / (2 * np.pi)
@@ -318,6 +320,7 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
     shift0 = shifts[np.argmax(sums)]
 
     print('Finally optimal shift:', shift0)
+    best_delay = shift0
     x, intfg = shifted_intfg(shift0)
 
     intfg_interp = interp1d(x=x,y=intfg,
