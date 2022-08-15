@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import traceback
 from scipy.interpolate import interp1d
 from common import numerics as num
 from common.baseclasses import AWA
@@ -8,6 +9,7 @@ from scipy.stats import binned_statistic
 from scipy.optimize import leastsq,minimize
 
 basedir = os.path.dirname(__file__)
+diagnostic_dir = os.path.join(basedir,'..','Diagnostic')
 
 dX=None #This will imply the same df throughout, until (say), `normalize_spectra`
 
@@ -82,6 +84,17 @@ def weighted_average(a1, a2, w1, w2):
 
     return np.array([yavg, x1])
 
+def flatten_interferogram(x,y,flattening_order=20):
+
+    while flattening_order>0:
+        try:
+            y -= np.polyval(np.polyfit(x=x, y=y, deg=flattening_order), x)
+            return y
+        except:
+            flattening_order -= 1
+
+    return y
+
 best_delay=0
 
 def get_best_delay():
@@ -89,9 +102,9 @@ def get_best_delay():
     global best_delay
     return best_delay
 
-def align_interferograms(intfgs_arr, delay_calibration_factor=1,
-                         delay0=0,optimize_delay=True,delay_range=15,
-                         flattening_order=20, noise=0):
+def align_interferograms_old(intfgs_arr, delay_calibration_factor=1,
+                             shift0=0, optimize_shift=True, shift_range=15,
+                             flattening_order=20, noise=0):
     #At a scan rate of 250kHz, a 12-point delay corresponds to only about 50 microseconds
 
     global dX,best_delay
@@ -111,7 +124,7 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
 
         xs *= delay_calibration_factor
         xs = numrec.smooth(xs, window_len=x_smoothing, axis=0)
-        ys -= np.polyval(np.polyfit(x=xs, y=ys, deg=flattening_order), xs)
+        ys = flatten_interferogram(xs,ys,flattening_order=flattening_order)
         if noise: ys+=noise*np.random.randn(len(ys))*(ys.max()-ys.min())/2
 
         all_xs = np.append(all_xs, xs)
@@ -139,20 +152,20 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
         return xnew, intfg_new
 
     #Scan over delays to find most ideal value
-    if optimize_delay:
-        delays = np.arange(int(delay0-delay_range),
-                           int(delay0+delay_range), 1)
+    if optimize_shift:
+        delays = np.arange(int(shift0 - shift_range),
+                           int(shift0 + shift_range), 1)
         sums = []
         for delay in delays:
             xnew, intfg_new = delayed_intfg(delay)
             sums.append(np.sum(intfg_new ** 2))
 
-        delay0 = delays[np.argmax(sums)]
+        shift0 = delays[np.argmax(sums)]
 
-    best_delay=delay0
-    print('Optimal shift:',delay0)
+    best_delay=shift0
+    print('Optimal shift:', shift0)
 
-    xnew, intfg_new = delayed_intfg(delay0)
+    xnew, intfg_new = delayed_intfg(shift0)
 
     intfg_interp = interp1d(x=xnew,y=intfg_new,
                             **interp_kwargs)
@@ -384,6 +397,27 @@ def align_interferograms_fwd_bwd(intfgs_arr, delay_calibration_factor=1,
 
     return np.array([intfg_y_fwd,intfg_x_fwd,
                      intfg_y_bwd,intfg_x_bwd])
+
+#--- Wrapper
+def align_interferograms(intfgs_arr, delay_calibration_factor=1,
+                         shift0=0,optimize_shift=True,shift_range=15,
+                         flattening_order=20,noise=0):
+
+    import traceback
+    try:
+        result = align_interferograms_old(intfgs_arr, delay_calibration_factor=delay_calibration_factor,
+                                     shift0=shift0,optimize_shift=optimize_shift,shift_range=shift_range,
+                                     flattening_order=flattening_order,noise=noise)
+        return result
+
+    except:
+
+        error_text = str(traceback.format_exc())
+        error_file = os.path.join(diagnostic_dir,'python_error.txt')
+        with open(error_file,'w') as f:
+            f.write(error_text)
+
+        return False
 
 def spectral_envelope(f,A,f0,df,expand_envelope=1):
 
@@ -1016,9 +1050,19 @@ class SpectralProcessor(object):
 
 def accumulate_spectra(spectra, apply_envelope=True, expand_envelope=1):
 
-    return SpectralProcessor.accumulate_spectra(spectra,
-                                                apply_envelope=apply_envelope,
-                                                expand_envelope=expand_envelope)
+    try:
+        return SpectralProcessor.accumulate_spectra(spectra,
+                                                    apply_envelope=apply_envelope,
+                                                    expand_envelope=expand_envelope)
+
+    except:
+
+        error_text = str(traceback.format_exc())
+        error_file = os.path.join(diagnostic_dir,'python_error.txt')
+        with open(error_file,'w') as f:
+            f.write(error_text)
+
+        return False
 
 def BB_referenced_spectrum(spectra,spectra_BB,
                           apply_envelope=True, envelope_width=1,
