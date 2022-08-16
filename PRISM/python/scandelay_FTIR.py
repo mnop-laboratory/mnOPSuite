@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import traceback
+import scipy
 from scipy.interpolate import interp1d
 from common import numerics as num
 from common.baseclasses import AWA
@@ -17,18 +18,23 @@ interp_kwargs=dict(bounds_error=False,
                    fill_value=0,
                    kind='cubic')
 
-def test(intfgms_arr, delay_calibration_factor=1,
+def test(intfgs_arr, delay_calibration_factor=1,
                          order=1,refresh_alignment=True,
                          flattening_order=20,Nwavelengths=4):
 
-    import traceback
     try:
-        result = align_interferograms(intfgms_arr)
+        file=os.path.join(diagnostic_dir,'intfg_err.txt')
+        intfgs_arr = np.loadtxt(file)
+        result =align_interferograms_new(intfgs_arr, delay_calibration_factor=-2.5,
+                                     shift0=-10,optimize_shift=True,shift_range=10,
+                                     flattening_order=10,noise=0)
         return str(1)
 
     except:
-
-        return str(traceback.format_exc())
+        #s=str(np.__version__)+','+str(scipy.__version__)
+        s=str(np.__file__)
+        s= str(traceback.format_exc())
+        return s
 
 def bin_average(a, Nx, delay_calibration_factor=1):
 
@@ -119,7 +125,7 @@ def align_interferograms_old(intfgs_arr, delay_calibration_factor=1,
     all_ys = []
     for i in range(Ncycles):
         # i=i+10
-        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1)])
+        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1)]).copy()
         if i==0: Nbins = len(xs)
 
         xs *= delay_calibration_factor
@@ -179,6 +185,7 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
                          flattening_order=20,noise=0):
 
     global dX,best_delay
+    global intfg_mutual_fwd,intfg_mutual_bwd
 
     intfgs_arr = np.array(intfgs_arr)
     Ncycles = len(intfgs_arr) // 2
@@ -196,15 +203,14 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
         # i=i+10
         ys, xs = intfgs_arr[2 * i:2 * (i + 1)]
 
-        xs *= delay_calibration_factor
         xs = numrec.smooth(xs, window_len=x_smoothing, axis=0)
-
-        ys += noise * np.random.randn(len(ys)) * (ys.max() - ys.min()) / 2
-        ys -= np.polyval(np.polyfit(x=xs, y=ys, deg=flattening_order), xs)
-
         if i == 0:
             Nbins = len(xs)
             idx_turn = np.argmax(xs)
+
+        xs = xs*delay_calibration_factor
+        ys = ys + noise * np.random.randn(len(ys)) * (ys.max() - ys.min()) / 2
+        ys = ys - np.polyval(np.polyfit(x=xs, y=ys, deg=flattening_order), xs)
 
         all_xs_fwd.append(xs[:idx_turn])
         all_ys_fwd.append(ys[:idx_turn])
@@ -278,8 +284,8 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
     #--- Define some helper functions for identifying x-coordinate of interferograms
     def get_dx(intfg_mutual_fwd, intfg_mutual_bwd, exp=4):
 
-        sf = num.Spectrum(intfg_mutual_fwd, axis=0)
-        sb = num.Spectrum(intfg_mutual_bwd, axis=0)
+        sf = num.Spectrum(intfg_mutual_fwd-np.mean(intfg_mutual_fwd), axis=0)
+        sb = num.Spectrum(intfg_mutual_bwd-np.mean(intfg_mutual_bwd), axis=0)
         spow = np.abs(sf) ** exp + np.abs(sb) ** exp
         keep = (spow >= spow.max() / 10) * (sf.axes[0] > 0)
         norm = sf / sb
@@ -361,7 +367,7 @@ def align_interferograms_fwd_bwd(intfgs_arr, delay_calibration_factor=1,
     all_ys_bwd = []
     all_xs = []
     for i in range(Ncycles):
-        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1)])
+        ys, xs = np.array(intfgs_arr[2 * i:2 * (i + 1)]).copy()
 
         xs = numrec.smooth(xs, window_len=x_smoothing, axis=0)
         if i==0:
@@ -403,19 +409,23 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
                          shift0=0,optimize_shift=True,shift_range=15,
                          flattening_order=20,noise=0):
 
-    import traceback
     try:
-        result = align_interferograms_old(intfgs_arr, delay_calibration_factor=delay_calibration_factor,
+        result = align_interferograms_new(intfgs_arr, delay_calibration_factor=delay_calibration_factor,
                                      shift0=shift0,optimize_shift=optimize_shift,shift_range=shift_range,
                                      flattening_order=flattening_order,noise=noise)
         return result
 
     except:
 
+        #--- Dump the error
         error_text = str(traceback.format_exc())
-        error_file = os.path.join(diagnostic_dir,'python_error.txt')
-        with open(error_file,'w') as f:
-            f.write(error_text)
+        error_file = os.path.join(diagnostic_dir,'align_interferograms.err')
+        with open(error_file,'w') as f: f.write(error_text)
+
+        #--- Dump the problematic interferograms
+        error_file = os.path.join(diagnostic_dir,'intfg_err.txt')
+        if not os.path.exists(error_file):
+            np.savetxt(error_file,intfgs_arr)
 
         return False
 
@@ -1056,9 +1066,8 @@ def accumulate_spectra(spectra, apply_envelope=True, expand_envelope=1):
                                                     expand_envelope=expand_envelope)
 
     except:
-
         error_text = str(traceback.format_exc())
-        error_file = os.path.join(diagnostic_dir,'python_error.txt')
+        error_file = os.path.join(diagnostic_dir,'accumulate_spectra.err')
         with open(error_file,'w') as f:
             f.write(error_text)
 

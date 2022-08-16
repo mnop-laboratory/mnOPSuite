@@ -92,7 +92,8 @@ def wn_to_wl(wn): return np.round(1e7/wn)
 
 pumpmax=100
 
-def set_replicator_table(wavelengths=None,wns=None,pumps=None):
+def set_replicator_table(wavelengths=None,wns=None,pumps=None,
+                         pump_max=100):
 
     assert wavelengths is not None or wns is not None
     assert wavelengths is None or wns is None
@@ -111,7 +112,9 @@ def set_replicator_table(wavelengths=None,wns=None,pumps=None):
             time.sleep(20)  # make sure the delay is at least 0.5 s
 
             if pumps is not None:
-                cmd = "@mir setpump %1.1f" % pumps[i]
+                pump=pumps[i]
+                if pump>pump_max: pump=pump_max
+                cmd = "@mir setpump %1.1f" % pump
                 print(cmd)
                 Ws.send(cmd)
                 time.sleep(2)  # make sure the delay is at least 0.5 s
