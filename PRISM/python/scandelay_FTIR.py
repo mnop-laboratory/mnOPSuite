@@ -1076,8 +1076,8 @@ def accumulate_spectra(spectra, apply_envelope=True, expand_envelope=1):
 def BB_referenced_spectrum(spectra,spectra_BB,
                           apply_envelope=True, envelope_width=1,
                            optimize_BB=False,
-                          optimize_phase=False,abs_only=True,
-                           valid_thresh=.01):
+                          optimize_phase=False,valid_thresh=.01,
+                           abs_only=True):
 
     SP=SpectralProcessor(spectra,spectra_BB,
                          [],[]) #Leave reference spectra empty
