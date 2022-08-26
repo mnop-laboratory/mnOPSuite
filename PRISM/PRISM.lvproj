@@ -81,13 +81,13 @@
 			<Property Name="PhysicalChanName" Type="Str">Dev1/ai0</Property>
 		</Item>
 		<Item Name="NewportFlipper.vi" Type="VI" URL="../../Peripherals/NewportFlipper.vi"/>
-		<Item Name="NewportFlipper_old.vi" Type="VI" URL="../../Peripherals/NewportFlipper_old.vi"/>
 		<Item Name="PRISM_RasterScan.vi" Type="VI" URL="../PRISM_RasterScan.vi"/>
 		<Item Name="python_test.vi" Type="VI" URL="../Diagnostic/python_test.vi"/>
 		<Item Name="ScanDelay_FTIR_AcquireInterferogram.vi" Type="VI" URL="../ScanDelay_FTIR_AcquireInterferogram.vi"/>
 		<Item Name="ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi" Type="VI" URL="../ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi"/>
 		<Item Name="ScanDelay_FTIR_BBnorm.vi" Type="VI" URL="../ScanDelay_FTIR_BBnorm.vi"/>
 		<Item Name="ScanDelay_FTIR_BBnorm_Aligning_NewportFlipper.vi" Type="VI" URL="../ScanDelay_FTIR_BBnorm_Aligning_NewportFlipper.vi"/>
+		<Item Name="ScanDelay_FTIR_BBnorm_Aligning_NewportFlipper_AttenuateBB.vi" Type="VI" URL="../ScanDelay_FTIR_BBnorm_Aligning_NewportFlipper_AttenuateBB.vi"/>
 		<Item Name="ScanDelay_FTIR_GetSpectrum.vi" Type="VI" URL="../ScanDelay_FTIR_GetSpectrum.vi"/>
 		<Item Name="ScanDelay_FTIR_GetSpectrum_Aligning.vi" Type="VI" URL="../ScanDelay_FTIR_GetSpectrum_Aligning.vi"/>
 		<Item Name="ScanDelay_FTIR_GetSpectrum_Aligning_ProducerConsumer.vi" Type="VI" URL="../ScanDelay_FTIR_GetSpectrum_Aligning_ProducerConsumer.vi"/>
@@ -363,8 +363,8 @@
 			</Item>
 			<Item Name="Control_AcquireSpectrum.ctl" Type="VI" URL="../../ScanDelay/Control_AcquireSpectrum.ctl"/>
 			<Item Name="Control_GetSpectrum_Aligning.ctl" Type="VI" URL="../Control_GetSpectrum_Aligning.ctl"/>
+			<Item Name="Control_GetSpectrum_BBnorm_AttenuateBB.ctl" Type="VI" URL="../../../../../../Downloads/mnOPSuite/mnOPSuite/PRISM/Control_GetSpectrum_BBnorm_AttenuateBB.ctl"/>
 			<Item Name="Control_scanDelayWorkflow.ctl" Type="VI" URL="../Control_scanDelayWorkflow.ctl"/>
-			<Item Name="Control_scanDelayWorkflow.ctl" Type="VI" URL="../../ScanDelay/Control_scanDelayWorkflow.ctl"/>
 			<Item Name="lvanlys.dll" Type="Document" URL="/&lt;resource&gt;/lvanlys.dll"/>
 			<Item Name="nilvaiu.dll" Type="Document" URL="nilvaiu.dll">
 				<Property Name="NI.PreserveRelativePath" Type="Bool">true</Property>
@@ -372,6 +372,7 @@
 			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="../Thorlabs.MotionControl.Controls.dll"/>
 			<Item Name="Thorlabs.MotionControl.FilterFlipperCLI.dll" Type="Document" URL="../Thorlabs.MotionControl.FilterFlipperCLI.dll"/>
 			<Item Name="Thorlabs.MotionControl.KCube.StepperMotorCLI.dll" Type="Document" URL="../Thorlabs.MotionControl.KCube.StepperMotorCLI.dll"/>
+			<Item Name="Untitled 3 (SubVI).vi" Type="VI" URL="../../../../../Documents/Test/Untitled 3 (SubVI).vi"/>
 		</Item>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>
