@@ -92,6 +92,26 @@ def wn_to_wl(wn): return np.round(1e7/wn)
 
 pumpmax=100
 
+def set_pump(pump,pump_max=pumpmax):
+
+    assert pump<pump_max
+
+    Ws = WsHandler(alpha_uri)
+    try:
+        print('Setting pump to %1.1f...' % pump )
+
+        if pump > pump_max: pump = pump_max
+        cmd = "@mir setpump %1.1f" % pump
+        print(cmd)
+        Ws.send(cmd)
+        time.sleep(0.5)  # make sure the delay is at least 0.5 s
+
+        Ws.close()
+        return cmd
+    except:
+        Ws.close()
+        raise
+
 def set_replicator_table(wavelengths=None,wns=None,pumps=None,
                          pump_max=100):
 
