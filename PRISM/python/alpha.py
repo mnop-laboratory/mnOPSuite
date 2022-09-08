@@ -20,7 +20,9 @@ import sympy as sym
 
 class WsHandler(object):
 
+    # Keep these class-wide variables so that different socket instances by default do not overlap their cmd_id's
     latest_socket = 8000
+    cmd_id = 100
 
     def __init__(self, uri,timeout=1):
         self.useJSON = True
@@ -36,27 +38,43 @@ class WsHandler(object):
             self.connected = False
             raise RuntimeError('Alpha websocket not connected! Could not connect to %s' % full_uri)
 
-    def _toJSON(self, msg, cmd_id=100):
+    def _toJSON(self, msg, cmd_id=None):
+        if cmd_id is None: cmd_id=self.cmd_id
         return ('{"cmd_id":%d,"data":"%s"}' % (cmd_id, msg))
 
-    def _fromJSON(self, msg):
-        return msg.split("data")[1].replace('""', '').replace(":", "").replace("}", "")
+    def _fromJSON(self, json_msg):
+        msg = json_msg.split("data")[1].replace('"', '').replace(":", "").replace("}", "")
+        cmd_id = json_msg.split("data")[0].replace('{"cmd_id":', '').replace(',"', "")
+        return cmd_id, msg
 
-    def send(self, msg):
-        if not self.connected:
-            raise RuntimeError('Alpha websocket not connected!')
+    def send(self, msg, cmd_id=None):
+
+        # Increment latest cmd_id if not using specified
+        if cmd_id is None:
+            self.cmd_id += 1
+            cmd_id = self.cmd_id
+        else: self.cmd_id = cmd_id
+
         if self.useJSON:
-            self.ws.send(self._toJSON(msg))
+            self.ws.send(self._toJSON(msg, cmd_id))
         else:
             self.ws.send(msg)
 
-    def recv(self):
-        if not self.connected:
-            raise RuntimeError('Alpha websocket not connected!')
+    def recv(self, cmd_id=None, timeout=10):
+
+        # Use last sent cmd_id if one is not specified
+        if cmd_id is None: cmd_id=self.cmd_id
+
+        if timeout <= 0:
+            return None  # return None if counter is 0
         if self.useJSON:
-            return self._fromJSON(self.ws.recv())
+            msg_cmd_id, msg = self._fromJSON(self.ws.recv())  # receive next message from websocket
+            if (int(cmd_id) == int(msg_cmd_id)):  # check message for correct id
+                return msg
+            else:
+                return self.recv(cmd_id, timeout - 1)  # check next message
         else:
-            return self.recv()
+            return self.ws.recv()
 
     def close(self):
         if not self.connected:
@@ -102,6 +120,42 @@ def set_pump(pump,pump_max=pumpmax):
 
         if pump > pump_max: pump = pump_max
         cmd = "@mir setpump %1.1f" % pump
+        print(cmd)
+        Ws.send(cmd)
+        time.sleep(0.5)  # make sure the delay is at least 0.5 s
+
+        Ws.close()
+        return cmd
+    except:
+        Ws.close()
+        raise
+
+def set_pump_factor(factor=0.2):
+
+    Ws = WsHandler(alpha_uri)
+    try:
+        print('Modifying MIR pump by factor of %1.1f...' % factor)
+
+        # command id
+        my_cmd_id = 100
+
+        # request axis 7 position
+        Ws.send("@ax 7 getpos", my_cmd_id)
+
+        # receive message with correct id
+        reply = Ws.recv(my_cmd_id)
+
+        # print reply (float/int conversion might be useful for further processing)
+        theta_deg = float(reply)
+
+        power = np.sin(2 * theta_deg / 180 * np.pi) ** 2 * 100 # pump power as a percentage
+        new_power = power * factor
+
+        assert new_power < 100,'New power of %1.1f%% must be less than 100%%' % new_power
+
+        print('Changing pump power from %1.1f to %1.1f...' % (power, new_power) )
+
+        cmd = "@mir setpump %1.1f" % new_power
         print(cmd)
         Ws.send(cmd)
         time.sleep(0.5)  # make sure the delay is at least 0.5 s
