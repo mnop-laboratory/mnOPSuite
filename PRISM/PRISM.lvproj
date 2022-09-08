@@ -363,7 +363,7 @@
 			</Item>
 			<Item Name="Control_AcquireSpectrum.ctl" Type="VI" URL="../../ScanDelay/Control_AcquireSpectrum.ctl"/>
 			<Item Name="Control_GetSpectrum_Aligning.ctl" Type="VI" URL="../Control_GetSpectrum_Aligning.ctl"/>
-			<Item Name="Control_GetSpectrum_BBnorm_AttenuateBB.ctl" Type="VI" URL="../../../../../../Downloads/mnOPSuite/mnOPSuite/PRISM/Control_GetSpectrum_BBnorm_AttenuateBB.ctl"/>
+			<Item Name="Control_GetSpectrum_BBnorm_AttenuateBB.ctl" Type="VI" URL="../Control_GetSpectrum_BBnorm_AttenuateBB.ctl"/>
 			<Item Name="Control_scanDelayWorkflow.ctl" Type="VI" URL="../Control_scanDelayWorkflow.ctl"/>
 			<Item Name="lvanlys.dll" Type="Document" URL="/&lt;resource&gt;/lvanlys.dll"/>
 			<Item Name="nilvaiu.dll" Type="Document" URL="nilvaiu.dll">
