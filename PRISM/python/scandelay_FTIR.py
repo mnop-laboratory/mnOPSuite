@@ -462,7 +462,7 @@ def fit_envelope(f,sabs,fmin=400,fmax=3500):
 
     return envelope,envelope_params
 
-def fourier_xform(a,tsubtract=0,envelope=True):
+def fourier_xform(a,tsubtract=0,envelope=True,gain=1):
 
     v,t=np.array(a)
     c=3e8 #speed of light in m/s
@@ -472,11 +472,12 @@ def fourier_xform(a,tsubtract=0,envelope=True):
     d*=1e2 #distance in cm
 
     v = v-np.mean(v)
+    v *= gain
     w = np.blackman(len(v))
-    """wmax_ind = np.argmax(w)
+    wmax_ind = np.argmax(w) #Let's roll window to position of maximum weight in interferogram
     centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
     imax_ind = np.argmin((centerd - d) ** 2)
-    w = np.roll(w, imax_ind - wmax_ind, axis=0)"""
+    w = np.roll(w, imax_ind - wmax_ind, axis=0)
     #w = 1 #We are disabling the windowing for now
 
     v *= w
@@ -1079,21 +1080,28 @@ def BB_referenced_spectrum(spectra,spectra_BB,
                           optimize_phase=False,valid_thresh=.01,
                            abs_only=True):
 
-    SP=SpectralProcessor(spectra,spectra_BB,
-                         [],[]) #Leave reference spectra empty
+    try:
+        SP=SpectralProcessor(spectra,spectra_BB,
+                             [],[]) #Leave reference spectra empty
 
-    f, spectrum_abs, spectrum =\
-                    SP.process_spectrum(target='sample',
-                                       apply_envelope=apply_envelope,
-                                        envelope_width=envelope_width,
-                                        valid_thresh=valid_thresh,
-                                        optimize_BB=optimize_BB,
-                                        optimize_phase=optimize_phase,
-                                        view_phase_alignment=False)
+        f, spectrum_abs, spectrum =\
+                        SP.process_spectrum(target='sample',
+                                           apply_envelope=apply_envelope,
+                                            envelope_width=envelope_width,
+                                            valid_thresh=valid_thresh,
+                                            optimize_BB=optimize_BB,
+                                            optimize_phase=optimize_phase,
+                                            view_phase_alignment=False)
+        return np.array([f,
+                         spectrum_abs,
+                         SP.get_phase(f, spectrum, level_phase=True)])
+    except:
+        error_text = str(traceback.format_exc())
+        error_file = os.path.join(diagnostic_dir,'BB_referenced_spectrum.err')
+        with open(error_file,'w') as f:
+            f.write(error_text)
 
-    return np.array([f,
-                     spectrum_abs,
-                     SP.get_phase(f, spectrum, level_phase=True)])
+        raise
 
 def normalized_spectrum(sample_spectra, sample_BB_spectra,
                        ref_spectra, ref_BB_spectra,

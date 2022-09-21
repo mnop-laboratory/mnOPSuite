@@ -84,9 +84,13 @@ class WsHandler(object):
 
 alpha_uri = "ws://192.168.51.1"  # alpha address
 
+def wn_to_wl(wn): return np.round(1e7/np.array(wn))
+
+def wl_to_wn(wl): return np.round(1e7/np.array(wl))
 
 def pump_generator(wns=(600,1000,1200,1400,1600,1800),
-                   pump_vals=np.array((100,10,6,5,10,15))):
+                   pump_vals=np.array((100,10,6,5,10,15)),
+                   min_val=0,max_val=100):
     """Generate a function to estimate desired mid-IR pump values;
     function output will be extrapolated from a table of pump values at fixed mid-IR energies."""
 
@@ -104,9 +108,35 @@ def pump_generator(wns=(600,1000,1200,1400,1600,1800),
     sol = sym.solve(ps, dict=True)[0]
     polyfunc = sym.lambdify(x, p.subs(sol))
 
-    return polyfunc
+    def wrapped(wn):
 
-def wn_to_wl(wn): return np.round(1e7/wn)
+        result = polyfunc(wn)
+
+        #Make sure output is array
+        if hasattr(wn,'__len__'):
+            if not hasattr(result,'__len__'):
+                result = np.array([result]*len(wn))
+        else: result=np.array(result)
+
+        #Constrain output
+        result[result>max_val]=max_val
+        result[result<min_val]=min_val
+
+        return result
+
+    return wrapped
+
+def get_pump_at_replication_wavelength(wl,
+                                        wns=(600, 1000, 1200, 1400, 1600, 1800),
+                                        pump_vals=(100, 10, 6, 5, 10, 15)):
+
+    wns=np.array(wns).flatten() #They may come in as a row vector
+    pump_vals=np.array(pump_vals).flatten()
+
+    wn_rep = wl_to_wn(wl)
+    pumpgen = pump_generator(wns,pump_vals)
+
+    return pumpgen(wn_rep)
 
 pumpmax=100
 
