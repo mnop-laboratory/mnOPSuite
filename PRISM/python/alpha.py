@@ -72,6 +72,7 @@ class WsHandler(object):
             if (int(cmd_id) == int(msg_cmd_id)):  # check message for correct id
                 return msg
             else:
+                time.sleep(1) #2022.09.22 @ASM: added to prevent `None`
                 return self.recv(cmd_id, timeout - 1)  # check next message
         else:
             return self.ws.recv()
@@ -132,11 +133,20 @@ def get_pump_at_replication_wavelength(wl,
 
     wns=np.array(wns).flatten() #They may come in as a row vector
     pump_vals=np.array(pump_vals).flatten()
+    pump_min=np.min(pump_vals)
 
     wn_rep = wl_to_wn(wl)
-    pumpgen = pump_generator(wns,pump_vals)
+    #pumpgen = pump_generator(wns,pump_vals)
 
-    return pumpgen(wn_rep)
+    p = np.polyfit(wns,pump_vals,deg=len(pump_vals))
+    pumpgen = lambda wn: np.polyval(p,wn)
+    pumps = pumpgen(wn_rep)
+
+    if hasattr(pumps,'__len__'):
+        pumps[pumps<pump_min] = pump_min
+    elif pumps<pump_min: pumps=pump_min
+
+    return pumps
 
 pumpmax=100
 
@@ -181,7 +191,9 @@ def set_pump_factor(factor=0.2):
         power = np.sin(2 * theta_deg / 180 * np.pi) ** 2 * 100 # pump power as a percentage
         new_power = power * factor
 
-        assert new_power < 100,'New power of %1.1f%% must be less than 100%%' % new_power
+        if new_power > 100:
+            print('New power of %1.1f%% must be less than 100%%' % new_power)
+            new_power = 100
 
         print('Changing pump power from %1.1f to %1.1f...' % (power, new_power) )
 

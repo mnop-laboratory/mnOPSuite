@@ -5,10 +5,14 @@ p=[0]
 
 def fit_phase_leakage(leakage_arr,amps,n=5):
 
+    amps=np.array(amps)
+    leakage_arr=np.array(leakage_arr)
+    amps = amps[np.isfinite(leakage_arr)]
+    leakage_arr = leakage_arr[np.isfinite(leakage_arr)]
+
     global p
-    N=len(leakage_arr)
-    deg=4#int(N/3)
-    p=np.polyfit(x=amps,y=leakage_arr,deg=deg)
+    if n>len(amps)-1: n=len(amps)-1
+    p=np.polyfit(x=amps,y=leakage_arr,deg=n)
 
     fit = np.polyval(p,amps)
 
