@@ -89,6 +89,62 @@ def wn_to_wl(wn): return np.round(1e7/np.array(wn))
 
 def wl_to_wn(wl): return np.round(1e7/np.array(wl))
 
+class PiecewiseInterpolator(object):
+
+    @staticmethod
+    def _linear(wn_pair,val_pair):
+
+        dwn = wn_pair[1]-wn_pair[0]
+        dval = val_pair[1] - val_pair[0]
+
+        x0 = wn_pair[0]
+        y0 = val_pair[0]
+        m = dval/dwn
+
+        return lambda x: m*(x-x0) + y0
+
+    def __init__(self,wns,vals,
+                 max_val=None,min_val=None):
+
+        assert len(wns)==len(vals)
+
+        wns,vals = zip(*sorted(zip(wns,vals)))
+        self.wns = np.array(wns)
+        self.vals = np.array(vals)
+
+        self.max_val = max_val
+        self.min_val = min_val
+
+        self.wn_pairs = [(wns[i],wns[i+1]) \
+                    for i in range(len(wns)-1)]
+        self.val_pairs = [(vals[i],vals[i+1]) \
+                    for i in range(len(vals)-1)]
+        self.functions = [self._linear(wn_pair,val_pair) \
+                          for wn_pair,val_pair in \
+                          zip(self.wn_pairs,self.val_pairs)]
+        self.functions = [lambda x: vals[0] + 0*x] \
+                         + self.functions \
+                        + [lambda x: vals[-1] + 0*x]
+
+    def __call__(self,wn):
+
+        conditions = [wn<self.wns[0]] +\
+                     [(wn>=wn_pair[0]) * (wn<wn_pair[1]) \
+                      for wn_pair in self.wn_pairs] +\
+                     [wn>=self.wns[-1]]
+
+        result = np.piecewise(wn, conditions, self.functions)
+
+        if self.max_val is not None:
+            result[result>self.max_val] = self.max_val
+        if self.min_val is not None:
+            result[result<self.min_val] = self.min_val
+
+        return result
+
+
+
+
 def pump_generator(wns=(600,1000,1200,1400,1600,1800),
                    pump_vals=np.array((100,10,6,5,10,15)),
                    min_val=0,max_val=100):
@@ -133,20 +189,13 @@ def get_pump_at_replication_wavelength(wl,
 
     wns=np.array(wns).flatten() #They may come in as a row vector
     pump_vals=np.array(pump_vals).flatten()
-    pump_min=np.min(pump_vals)
 
     wn_rep = wl_to_wn(wl)
-    #pumpgen = pump_generator(wns,pump_vals)
+    pumpgen = PiecewiseInterpolator(wns,pump_vals,
+                                    min_val=np.min(pump_vals),
+                                    max_val=100)
 
-    p = np.polyfit(wns,pump_vals,deg=len(pump_vals))
-    pumpgen = lambda wn: np.polyval(p,wn)
-    pumps = pumpgen(wn_rep)
-
-    if hasattr(pumps,'__len__'):
-        pumps[pumps<pump_min] = pump_min
-    elif pumps<pump_min: pumps=pump_min
-
-    return pumps
+    return pumpgen(wn_rep)
 
 pumpmax=100
 

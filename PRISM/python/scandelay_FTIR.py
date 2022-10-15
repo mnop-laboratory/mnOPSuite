@@ -191,7 +191,7 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
     intfgs_arr = np.array(intfgs_arr)
     Ncycles = len(intfgs_arr) // 2
     Nsamples = intfgs_arr.shape[1]
-    x_smoothing = np.min((Nsamples / 100, 50))
+    x_smoothing = np.min((Nsamples / 100, 100))
 
     # --- Process data
     all_xs_fwd = []
@@ -553,10 +553,10 @@ def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=2000):
     v = v-np.mean(v)
     v *= gain
     w = np.blackman(len(v))
-    """wmax_ind = np.argmax(w) #Let's roll window to position of maximum weight in interferogram
+    wmax_ind = np.argmax(w) #Let's roll window to position of maximum weight in interferogram
     centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
     imax_ind = np.argmin((centerd - d) ** 2)
-    w = np.roll(w, imax_ind - wmax_ind, axis=0)"""
+    w = np.roll(w, imax_ind - wmax_ind, axis=0)
     #w = 1 #We are disabling the windowing for now
 
     v *= w
