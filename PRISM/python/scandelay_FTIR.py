@@ -887,126 +887,102 @@ class SpectralProcessor(object):
         return p
 
     @classmethod
-    def pair_difference(cls,ps, f, spectrum, spectrum0, exp=1):  # shift spectrum to match spectrum0
-        p = ps[0]
+    def get_phases(cls,f,spectra,
+                      threshold=1e-2,
+                      ps=None,
+                      level=True,order=2,
+                      **kwargs):
+        """Return the phases corresponding to `spectra`, shifting each by an
+        appropriate factor of `2*pi` so that they are quasi=contiguous.
+        Spectra are assumed to have monotonically increasing center frequencies.
 
-        target = np.abs(spectrum0) + np.abs(spectrum)
-        actual = np.abs(spectrum0 + cls.phase_displace(f, spectrum, p))
-        delta = np.abs(target - actual) ** exp
+        Set `threshold` to decide the noise threshold above which spectral phase is computed.
 
-        return delta  # *penalty**1
+        Choose `level=True` to apply an overall polynomial leveling of order `order`
+        to all spectra together."""
 
-    @classmethod
-    def overall_difference(cls,ps, f, spectra, spectrum0, exp=1):
+        phases=[]
+        for i,s in enumerate(spectra):
+            if ps is not None:
+                s=cls.phase_displace(f,s,ps[i])
+            phase=cls.get_phase(f,s,manual_offset=0,
+                                level_phase=False,**kwargs) #level phase has to be false, we want the overall phase!
+            thresh=np.abs(s).max()*threshold
+            phase[np.abs(s) <= thresh] = np.nan
+            phases.append(phase)
 
-        spectra = [cls.phase_displace(f, s, p) for s, p in zip(spectra, ps)]
-        spectrum = cls.summed_spectrum(spectra, abs=False)
-        delta = np.abs(np.abs(spectrum) - np.abs(spectrum0)) ** exp
-        #pvariation = np.unwrap(np.angle(cls.level_phase(f, spectrum, 1)))
-        # pvariation=np.unwrap(np.angle(spectrum))
-        # pvariation=np.diff(pvariation)
-        #penalty = np.sqrt(np.sum(np.diff(pvariation) ** 2))
+        for i in range(len(phases)-1):
+            phase0=phases[i]
+            phase=phases[i+1]
+            coincide = np.isfinite(phase0)*np.isfinite(phase)
+            if not coincide.any(): break
+            d = np.mean(phase0[coincide]-phase[coincide])
+            npi = np.round(d/(2*np.pi))
+            offset = npi * 2*np.pi
+            #offset = d
+            phase += offset
 
-        return delta# * penalty ** (1 / 2)
+        if not level: return phases
 
-    @classmethod
-    def phase_aligned_spectrum(cls, f, spectra, verbose=False):
+        phase_avg = np.nanmean(phases,axis=0)
+        keep = np.isfinite(phase_avg)
+        poly = np.polyfit(f[keep],phase_avg[keep],deg=order)
+        background = np.polyval(poly,f)
+        for i in range(len(phases)): phases[i]-=background
 
-        # The result seems robust but potentially A LOT of evaluations are needed
-        lskwargs = dict(factor=.1, maxfev=int(1e5))
-        error_exp = 1  # Somehow a medium exponent converges fastest
+        return phases
 
-        Nspectra = len(spectra)
-        ps = [0] * Nspectra
-        center_ind = np.argmax([np.abs(s).max() for s in spectra])
-        spectrum0 = spectra[center_ind]
-        spectra_new = [0] * Nspectra
-        spectra_new[center_ind] = spectrum0
+    new_phase_alignment = True
 
-        #Phase-align spectra to the "left" of the starting spectrum
-        for i in range(center_ind):
-            workind = center_ind - (i + 1)
-            if verbose: print('working on index %i' % workind)
-            spectrum = spectra[workind]
-            p = leastsq(cls.pair_difference, [0],
-                        args=(f, spectrum, spectrum0, error_exp),
-                        **lskwargs)[0][0]
-            ps[workind] = p
-            spectra_new[workind] = cls.phase_displace(f, spectrum, p)
-            spectrum0 = np.sum(spectra_new, axis=0)
+    def phase_aligned_spectrum(cls, f, spectra, verbose=False,
+                               coincidence_exponent=2):
 
-        #Phase-align spectra to the "right" of the starting spectrum
-        for j in range(Nspectra - (center_ind + 1)):
-            workind = center_ind + (j + 1)
-            if verbose: print('working on index %i' % workind)
-            spectrum = spectra[workind]
-            p = leastsq(cls.pair_difference, [0],
-                        args=(f, spectrum, spectrum0, error_exp),
-                        **lskwargs)[0][0]
-            ps[workind] = p
-            spectra_new[workind] = cls.phase_displace(f, spectrum, p)
-            spectrum0 = np.sum(spectra_new, axis=0)
+        def add_spectrum(stot,s):
 
-        # report the result
-        cls.phase_alignments = ps
-        if verbose:
-            print('Phase compensations (2pi*cm):\n\t',
-                  '\n\t'.join((str(p) for p in ps)))
+            phase0 = cls.get_phase(f, stot, manual_offset=0,
+                                   level_phase=False)
+            phase = cls.get_phase(f, s, manual_offset=0,
+                                  level_phase=False)
+            coincidence = (np.abs(stot) * np.abs(s)) ** coincidence_exponent
+            norm = np.sum(coincidence)
 
-        stot = spectrum0
-        #If we want a single-pass at all-at-once alignment (not very good)
-        """ stot0 = cls.summed_spectrum(spectra,abs=True)
-        ps = leastsq(cls.overall_difference,ps,
-                     args=(f,spectra,stot0,1),
-                     **lskwargs)[0]
-        stot = cls.summed_spectrum([cls.phase_displace(f,s,p) for s,p
-                                    in zip(spectra,ps)],
-                                   abs = False)    
-        """
-        return stot
+            pdiff = np.sum((phase0 - phase) * coincidence) / norm
+            f0 = np.sum(f * coincidence) / norm
 
-    @classmethod
-    def phase_aligned_spectrum_multipass(cls, f, spectra, verbose=False):
+            # Decide how much of phase difference allocates to `2*pi` modulus and how much to physical shift
+            pdiff_pis = np.round(pdiff / (2 * np.pi)) * 2 * np.pi
+            phase_alignment = (pdiff - pdiff_pis) / f0
+            offset = pdiff_pis + phase_alignment * f
+            phase += offset
 
-        cls.phase_aligned_spectrum(f, spectra, verbose=False)
-        ps = cls.phase_alignments
+            spectrum_aligned = cls.phase_displace(f, s, phase_alignment)
 
-        # The result seems robust but potentially A LOT of evaluations are needed
-        lskwargs = dict(factor=.1, maxfev=int(1e5))
-        error_exp = 1  # Somehow a medium exponent converges fastest
+            return stot + spectrum_aligned, phase_alignment
 
-        Nspectra = len(spectra)
-        spectrum0 = spectra[0]
-        for center_ind in range(Nspectra):
+        #Find the spectrum with greatest weight
+        weights = [np.sum(np.abs(spectrum)**2)
+                   for spectrum in spectra]
+        ind0 = np.argmax(weights)
+        stot = spectra[ind0]
+        if verbose: print('Primary index for phase alignment:',ind0)
 
-            spectrum0 = np.sum([cls.phase_displace(f, s, p) \
-                                for s, p in zip(spectra[:center_ind + 1],
-                                                ps[:center_ind + 1])],
-                               axis=0)
+        cls.phase_alignments=[0]*len(spectra)
+        total_count=1
 
-            # Phase-align spectra to the "right" of the starting spectrum
-            for j in range(Nspectra - (center_ind + 1)):
-                workind = center_ind + (j + 1)
-                if verbose: print('working on index %i' % workind)
-                spectrum = spectra[workind]
-                p0=ps[workind]
-                p = leastsq(cls.pair_difference, [p0],
-                            args=(f, spectrum, spectrum0, error_exp),
-                            **lskwargs)[0][0]
-                ps[workind] = p
+        #Count backward
+        for i in np.arange(ind0-1,-1,-1):
+            stot, phase_alignment = add_spectrum(stot,spectra[i])
+            cls.phase_alignments[i] = phase_alignment
+            total_count+=1
 
-                spectrum0 = np.sum([cls.phase_displace(f, s, p) \
-                                    for s, p in zip(spectra[:workind + 1],
-                                                    ps[:workind + 1])],
-                                   axis=0)
+        #Count forward
+        for i in np.arange(ind0+1,len(spectra),1):
+            stot, phase_alignment = add_spectrum(stot,spectra[i])
+            cls.phase_alignments[i] = phase_alignment
+            total_count+=1
 
-        # report the result
-        cls.phase_alignments = ps
-        if verbose:
-            print('Phase compensations (2pi*cm):\n\t',
-                  '\n\t'.join((str(p) for p in ps)))
+        assert total_count==len(spectra)
 
-        stot = spectrum0
         return stot
 
     ###########
@@ -1041,7 +1017,8 @@ class SpectralProcessor(object):
                         valid_thresh=.01,
                         optimize_BB=True,
                         optimize_phase=True,
-                        view_phase_alignment=False):
+                        view_phase_alignment=False,
+                         phase_level_order=6):
 
         assert target=='sample' or target=='reference'
         if target=='sample':
@@ -1053,20 +1030,27 @@ class SpectralProcessor(object):
 
         print('Aligning and enveloping spectra...')
         f0, spectra, spectra_BB = self.align_and_envelope_spectra(all_spectra, all_spectra_BB,
-                                                                 apply_envelope=apply_envelope,
+                                                                   apply_envelope=apply_envelope,
                                                                    expand_envelope=envelope_width,
                                                                    factor=1,
                                                                    optimize_BB=optimize_BB,
                                                                    valid_thresh=valid_thresh)
+        self.f0 = f0
+        self.processed_spectra = spectra
+        self.processed_spectra_BB = spectra_BB
 
         # Align phase only if commanded and if complex value is to be retained
         if optimize_phase:
             print('Aligning phase...')
-            spectrum = self.phase_aligned_spectrum(f0, spectra, verbose=False)
+            phase_alignment_method = self.phase_aligned_spectrum
+            spectrum = phase_alignment_method(f0, spectra, verbose=False)
 
             if view_phase_alignment:
                 from matplotlib import pyplot as plt
-                plt.figure()
+                plt.figure(figsize=(10,10))
+
+                # Plot the spectral power recovered by phase correction
+                plt.subplot(211)
                 a = self.summed_spectrum(spectra, abs=True)
                 b = np.abs(self.summed_spectrum(spectra, abs=False))
                 c = np.abs(spectrum)
@@ -1074,12 +1058,36 @@ class SpectralProcessor(object):
                 plt.plot(f0, b, label='Phase unaligned')
                 plt.plot(f0, c, label='Phase aligned')
                 plt.ylabel('Power spectral density')
+                plt.xlabel('Frequency')
                 plt.legend(loc='best')
                 plt.twinx()
                 plt.plot(f0, a - c, color='r')
                 plt.ylabel('Spectral density lost to phase',
                            rotation=270,labelpad=20,color='r')
                 plt.xlim(500, 2500)
+
+                # Now plot directly the corrected phases
+                plt.subplot(212)
+                phases0 = self.get_phases_of_spectra(f0,spectra,
+                                                     threshold=.1,
+                                                     ps=None,
+                                                     level=True,order=phase_level_order)
+                phases = self.get_phases_of_spectra(f0,spectra,
+                                                     threshold=.1,
+                                                     ps=self.phase_alignments,
+                                                    level=True,order=phase_level_order)
+
+                label0='Uncorrected'; label='Corrected'
+                for i in range(len(phases0)):
+                    l,=plt.plot(f0,phases0[i],ls='--',label=label0)
+                    plt.plot(f0,phases[i],color=l.get_color(),label=label)
+                    label0=label=None
+                plt.xlabel('Frequency')
+                plt.ylabel('Phase ')
+                plt.legend(loc='best')
+
+                #plt.subplots_adjust(hspace=.3)
+                plt.tight_layout()
 
             spectra = [spectrum]
 
