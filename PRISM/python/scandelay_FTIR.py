@@ -553,10 +553,10 @@ def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=2000):
     v = v-np.mean(v)
     v *= gain
     w = np.blackman(len(v))
-    wmax_ind = np.argmax(w) #Let's roll window to position of maximum weight in interferogram
-    centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
-    imax_ind = np.argmin((centerd - d) ** 2)
-    w = np.roll(w, imax_ind - wmax_ind, axis=0)
+    #wmax_ind = np.argmax(w) #Let's roll window to position of maximum weight in interferogram
+    #centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
+    #imax_ind = np.argmin((centerd - d) ** 2)
+    #w = np.roll(w, imax_ind - wmax_ind, axis=0)
     #w = 1 #We are disabling the windowing for now
 
     v *= w
@@ -778,7 +778,7 @@ class SpectralProcessor(object):
     def align_and_envelope_spectra(cls,spectra, spectra_ref,
                                    apply_envelope=True,expand_envelope=1,
                                    BB_phase=False, valid_thresh=.01,
-                                   factor=1, optimize_BB=True,
+                                   factor=1, optimize_BB=False,
                                    verbose=True):
 
         spectra = np.array(spectra)
@@ -937,7 +937,7 @@ class SpectralProcessor(object):
     def phase_aligned_spectrum(cls, f, spectra, verbose=False,
                                coincidence_exponent=2):
 
-        def add_spectrum(stot,s):
+        def aligned_spectrum(stot,s):
 
             phase0 = cls.get_phase(f, stot, manual_offset=0,
                                    level_phase=False)
@@ -957,7 +957,7 @@ class SpectralProcessor(object):
 
             spectrum_aligned = cls.phase_displace(f, s, phase_alignment)
 
-            return stot + spectrum_aligned, phase_alignment
+            return spectrum_aligned, phase_alignment
 
         #Find the spectrum with greatest weight
         weights = [np.sum(np.abs(spectrum)**2)
@@ -967,23 +967,23 @@ class SpectralProcessor(object):
         if verbose: print('Primary index for phase alignment:',ind0)
 
         cls.phase_alignments=[0]*len(spectra)
+        spectra_aligned=[0]*len(spectra)
+        spectra_aligned[ind0]=spectra[ind0]
         total_count=1
 
-        #Count backward
-        for i in np.arange(ind0-1,-1,-1):
-            stot, phase_alignment = add_spectrum(stot,spectra[i])
-            cls.phase_alignments[i] = phase_alignment
-            total_count+=1
-
-        #Count forward
-        for i in np.arange(ind0+1,len(spectra),1):
-            stot, phase_alignment = add_spectrum(stot,spectra[i])
+        #Count backward, then forward
+        index_list = np.append( np.arange(ind0-1,-1,-1),
+                                np.arange(ind0+1,len(spectra),1) )
+        for i in index_list:
+            spectrum_aligned, phase_alignment = aligned_spectrum(stot,spectra[i])
+            stot = stot+spectrum_aligned
+            spectra_aligned[i] = spectrum_aligned
             cls.phase_alignments[i] = phase_alignment
             total_count+=1
 
         assert total_count==len(spectra)
 
-        return stot
+        return spectra_aligned
 
     ###########
     #- User API
@@ -1015,10 +1015,10 @@ class SpectralProcessor(object):
                         apply_envelope=True,
                         envelope_width=1,
                         valid_thresh=.01,
-                        optimize_BB=True,
+                        optimize_BB=False,
                         optimize_phase=True,
                         view_phase_alignment=False,
-                         phase_level_order=6):
+                         view_phase_alignment_leveling=6):
 
         assert target=='sample' or target=='reference'
         if target=='sample':
@@ -1039,11 +1039,12 @@ class SpectralProcessor(object):
         self.processed_spectra = spectra
         self.processed_spectra_BB = spectra_BB
 
-        # Align phase only if commanded and if complex value is to be retained
+        # Align phase only if commanded, store uncorrected version as `spectra0` for comparison
         if optimize_phase:
             print('Aligning phase...')
             phase_alignment_method = self.phase_aligned_spectrum
-            spectrum = phase_alignment_method(f0, spectra, verbose=False)
+            spectra0 = spectra
+            spectra = phase_alignment_method(f0, spectra0, verbose=False)
 
             if view_phase_alignment:
                 from matplotlib import pyplot as plt
@@ -1051,9 +1052,9 @@ class SpectralProcessor(object):
 
                 # Plot the spectral power recovered by phase correction
                 plt.subplot(211)
-                a = self.summed_spectrum(spectra, abs=True)
-                b = np.abs(self.summed_spectrum(spectra, abs=False))
-                c = np.abs(spectrum)
+                a = self.summed_spectrum(spectra0, abs=True)
+                b = np.abs(self.summed_spectrum(spectra0, abs=False))
+                c = np.abs(self.summed_spectrum(spectra, abs=False))
                 plt.plot(f0, a, label='Phase discarded')
                 plt.plot(f0, b, label='Phase unaligned')
                 plt.plot(f0, c, label='Phase aligned')
@@ -1068,14 +1069,14 @@ class SpectralProcessor(object):
 
                 # Now plot directly the corrected phases
                 plt.subplot(212)
-                phases0 = self.get_phases_of_spectra(f0,spectra,
+                phases0 = self.get_phases_of_spectra(f0,spectra0,
                                                      threshold=.1,
                                                      ps=None,
-                                                     level=True,order=phase_level_order)
+                                                     level=True,order=view_phase_alignment_leveling)
                 phases = self.get_phases_of_spectra(f0,spectra,
                                                      threshold=.1,
-                                                     ps=self.phase_alignments,
-                                                    level=True,order=phase_level_order)
+                                                     ps=None,
+                                                    level=True,order=view_phase_alignment_leveling)
 
                 label0='Uncorrected'; label='Corrected'
                 for i in range(len(phases0)):
@@ -1088,8 +1089,6 @@ class SpectralProcessor(object):
 
                 #plt.subplots_adjust(hspace=.3)
                 plt.tight_layout()
-
-            spectra = [spectrum]
 
         f, spectrum_abs = self.normalize_spectrum(f0, spectra,
                                               f0, spectra_BB,
@@ -1106,12 +1105,12 @@ class SpectralProcessor(object):
         return f,spectrum_abs,spectrum
 
     def __call__(self,
-                 optimize_BB=True,
+                 optimize_BB=False,
                  optimize_phase=True,
                  apply_envelope=True,
                  envelope_width=1,
                  valid_thresh=.01,
-                 view_phase_alignment=True,
+                 view_phase_alignment=False,
                  abs_only=False):
 
         print('Processing sample spectra...')
@@ -1196,7 +1195,7 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                        ref_spectra, ref_BB_spectra,
                        apply_envelope=True, envelope_width=1,
                        optimize_BB=True, optimize_phase=True,
-                       phase_offset=0,valid_thresh=.01):
+                       phase_offset=0,valid_thresh=.01, piecewise_flattening=0):
 
     SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
                            ref_spectra, ref_BB_spectra)
@@ -1207,221 +1206,16 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                           optimize_phase=optimize_phase,
                           view_phase_alignment=False)
 
+    if piecewise_flattening:
+        phase = SP.get_phase(f, snorm, level_phase=True, manual_offset=0)
+        offset,params = numrec.PiecewiseLinearFit(f,phase,nbreakpoints=piecewise_flattening,error_exp=0.25)
+        phase -= offset
+        snorm = snorm_abs*np.exp(1j*phase)
+
+    #Now finally apply manual offset
     phase=SP.get_phase(f, snorm, level_phase=True, manual_offset=phase_offset)
 
     # `get_phase` will apply some phase leveling
     return np.array([f,
                      snorm_abs,
                      phase])
-
-
-############
-#- Old stuff
-############
-
-def subtract_phase_slope(f,s,phase_slope):
-
-    s=s*np.exp(-1j*f*phase_slope) #positive phase slope means removal of positive time delay
-
-    return s
-
-def accumulate_spectra_old(spectra, apply_envelope=True,expand_envelope=1):
-    # `Spectra` is expected to be a set of stacked row vectors in groups of five,
-    # each group is indexed by row as:
-    # 0: frequencies
-    # 1: spectrum amplitude
-    # 2: spectrum phase
-    # 3: spectrum envelope
-    # 4: spectrum envelope parameters
-
-    phase_slope = 0
-
-    spectra = np.array(spectra)
-    Nrows = 5
-    assert len(spectra) % Nrows == 0, 'Input spectra must come as stacked groups of %i row vectors'%Nrows
-
-    s_accumulated = 0
-    s_accumulated_abs = 0
-    Nspectra = len(spectra) // Nrows
-    for i in range(Nspectra):
-
-        f = spectra[Nrows * i]
-        sabs = spectra[Nrows * i + 1]
-        sphase = spectra[Nrows * i + 2]
-        #env = spectra[4 * i + 3]
-        s = sabs * np.exp(1j * sphase)
-
-        # In case we have invalid entries (zeros), remove them
-        where_valid = np.isfinite(f) * (f > 0)
-        f = f[where_valid]
-        s = s[where_valid]
-
-        if i == 0:
-            f0 = f
-        else:
-            # interpolate to original frequencies
-            s = interp1d(f, s, **interp_kwargs)(f0)
-        if apply_envelope:
-            env_params = spectra[Nrows * i + 4][:3]
-            env = spectral_envelope(f0,*env_params,
-                                    expand_envelope=expand_envelope)
-            s = s * (env / env.max())  # normalize the envelope to unity
-
-        s_accumulated += s
-        s_accumulated_abs += np.abs(s)
-
-    # Subtract a phase slope
-    s_accumulated=subtract_phase_slope(f0,s_accumulated,phase_slope)
-
-    s_accum_phase = np.angle(s_accumulated)
-
-    return np.array([f0, s_accumulated_abs, s_accum_phase])
-
-def normalize_spectra_old(spectra, spectra_ref,
-                      apply_envelope=True, expand_envelope=1,
-                      reference_phase=False):
-    # `Spectra` is expected to be a set of stacked row vectors in groups of five,
-    # each group is indexed by row as:
-    # 0: frequencies
-    # 1: spectrum amplitude
-    # 2: spectrum phase
-    # 3: spectrum envelope
-    # 4: envelope parameters
-    # Same for reference spectra
-
-    # We need to apply envelopes from reference to analyte spectra!
-
-    # Presumably we can now refresh any dX
-    #global dX
-    #dX = None #Keep dX through duration of experiment
-
-    spectra = np.array(spectra)
-    spectra_ref = np.array(spectra_ref)
-    phase_slope = 0
-
-    Nrows = 5
-    if apply_envelope:
-        assert len(spectra)==len(spectra_ref),\
-            "Applying envelope requires same number of accumulations for both analyte and reference"
-
-    assert len(spectra) % Nrows == 0, 'Input spectra must come as stacked groups of %i row vectors'%Nrows
-    assert len(spectra_ref) % Nrows == 0, 'Input spectra must come as stacked groups of %i row vectors'%Nrows
-
-    s_accumulated = 0
-    s_accumulated_abs = 0
-    s_accumulated_ref = 0
-    s_accumulated_abs_ref = 0
-    Nspectra = np.max( (len(spectra) // Nrows, 1) )
-
-    # Establish some mutual frequency axis
-    all_fs = np.append([], [spectra[Nrows * i] for i in range(Nspectra)] \
-                           + [spectra_ref[Nrows * i] for i in range(Nspectra)] )
-    Nf = len(all_fs)//(2*Nspectra)
-    f0 = np.linspace(np.min(all_fs),
-                     np.max(all_fs),
-                     Nf)
-
-    for i in range(Nspectra):
-
-        ## Analyte spectrum components
-        f = spectra[Nrows * i]
-        sabs = spectra[Nrows * i + 1]
-        sphase = spectra[Nrows * i + 2]
-        s = sabs * np.exp(1j * sphase)
-
-        # In case we have invalid entries (zeros), remove them
-        where_valid = np.isfinite(f) * (f > 0)
-        f = f[where_valid]
-        s = s[where_valid]
-        s = interp1d(f, s, **interp_kwargs)(f0)
-
-        ## Reference spectrum components
-        f_ref = spectra_ref[Nrows * i]
-        sabs_ref = spectra_ref[Nrows * i + 1]
-        sphase_ref = spectra_ref[Nrows * i + 2]
-        s_ref = sabs_ref * np.exp(1j * sphase_ref)
-
-        # In case we have invalid entries (zeros), remove them
-        where_valid = np.isfinite(f_ref) * (f_ref > 0)
-        f_ref = f_ref[where_valid]
-        s_ref = s_ref[where_valid]
-
-        s_ref = interp1d(f_ref, s_ref,  **interp_kwargs)(f0)
-
-        if apply_envelope:
-            env_params = spectra_ref[Nrows * i + 4][:3]
-            env = spectral_envelope(f0, *env_params,
-                                    expand_envelope=expand_envelope)
-            env_norm = env/env.max() # normalize the envelope to unity
-            s_ref = s_ref * env_norm
-            s = s * env_norm
-
-        s_accumulated += s
-        s_accumulated_abs += np.abs(s)
-        s_accumulated_ref += s_ref
-        s_accumulated_abs_ref += np.abs(s_ref)
-
-    # Decide whether to propagate the reference phase or not to normalized spectrum
-    if reference_phase: s_norm = s_accumulated / s_accumulated_ref
-    else: s_norm = s_accumulated / s_accumulated_abs_ref
-    s_norm_abs = s_accumulated_abs / s_accumulated_abs_ref
-
-    # having divided by a reference possibly with zeros, remove those entries
-    where_valid = (s_accumulated_abs_ref > s_accumulated_abs_ref.max()/20)
-    s_norm=s_norm[where_valid]
-    s_norm_abs=s_norm_abs[where_valid]
-    f0 = f0[where_valid]
-
-    # Subtract a phase slope
-    s_norm = subtract_phase_slope(f0, s_norm, phase_slope)
-
-    s_norm_phase = np.angle(s_norm)
-
-    return np.array([f0, s_norm_abs, s_norm_phase])
-
-def double_normalize_spectra(spectra1, spectra1_ref,
-                             spectra2, spectra2_ref,
-                             apply_envelope=True, expand_envelope=1,
-                             reference_phase=False):
-    # Normalize `spectra1` with `spectra2` while accumulating with their own internal references.
-
-    phase_slope = 0
-
-    f1,s1_norm_abs,s1_norm_phase = normalize_spectra_old(spectra1, spectra1_ref,
-                                                    apply_envelope=apply_envelope,expand_envelope=expand_envelope,
-                                                     reference_phase=reference_phase)
-    s1_norm = s1_norm_abs*np.exp(1j*s1_norm_phase)
-
-    f2,s2_norm_abs,s2_norm_phase = normalize_spectra_old(spectra2, spectra2_ref,
-                                                    apply_envelope=apply_envelope,expand_envelope=expand_envelope,
-                                                     reference_phase=reference_phase)
-    s2_norm = s2_norm_abs*np.exp(1j*s2_norm_phase)
-
-    #Find mutual frequency axis
-    Nf = int( np.mean( (len(f1), len(f2)) ) )
-    fmin = np.max( (np.min(f1), np.min(f2)) )
-    fmax = np.min( (np.max(f1), np.max(f2)) )
-    f0 = np.linspace(fmin,fmax,Nf)
-
-    # interpolate second spectrum to mutual frequencies
-    s1_norm = interp1d(f1, s1_norm, **interp_kwargs)(f0)
-
-    # interpolate second spectrum to mutual frequencies
-    s2_norm = interp1d(f2, s2_norm, **interp_kwargs)(f0)
-    s2_norm_abs = np.abs(s2_norm) #Recompute now that frequencies were interpolated
-
-    s_norm = s1_norm / s2_norm
-    s_norm_abs = np.abs(s_norm)
-
-    # having divided by a reference possibly with zeros, remove those entries
-    where_valid = (s2_norm_abs != 0 )*np.isfinite(s2_norm_abs)
-    s_norm=s_norm[where_valid]
-    s_norm_abs=s_norm_abs[where_valid]
-    f0 = f0[where_valid]
-
-    # Subtract a phase slope
-    s_norm = subtract_phase_slope(f0, s_norm, phase_slope)
-
-    s_norm_phase = np.angle(s_norm)
-
-    return np.array([f0, s_norm_abs, s_norm_phase])
