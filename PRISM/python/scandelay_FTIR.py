@@ -102,11 +102,12 @@ def flatten_interferogram(x,y,flattening_order=20):
 
     return y
 
-best_delay=0
+best_delay=None
 
 def get_best_delay():
 
     global best_delay
+    if best_delay is None: return 0
     return best_delay
 
 def align_interferograms_old(intfgs_arr, delay_calibration_factor=1,
@@ -187,6 +188,7 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
 
     global dX,best_delay,Nbins
     global intfg_mutual_fwd,intfg_mutual_bwd
+    if best_delay is None: best_delay=shift0
 
     intfgs_arr = np.array(intfgs_arr)
     Ncycles = len(intfgs_arr) // 2
