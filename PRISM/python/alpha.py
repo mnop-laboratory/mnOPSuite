@@ -209,7 +209,7 @@ def set_pump(pump,pump_max=pumpmax):
         cmd = "@mir setpump %1.1f" % pump
         print(cmd)
         Ws.send(cmd)
-        time.sleep(1)  # make sure the delay is at least 0.5 s
+        time.sleep(3)  # make sure the delay is at least 0.5 s
 
         Ws.close()
         return cmd

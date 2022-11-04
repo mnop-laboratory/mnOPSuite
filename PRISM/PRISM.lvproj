@@ -82,6 +82,7 @@
 		</Item>
 		<Item Name="NewportFlipper.vi" Type="VI" URL="../../Peripherals/NewportFlipper.vi"/>
 		<Item Name="PRISM_RasterScan.vi" Type="VI" URL="../PRISM_RasterScan.vi"/>
+		<Item Name="PRISM_RasterScan_BSC202.vi" Type="VI" URL="../PRISM_RasterScan_BSC202.vi"/>
 		<Item Name="python_test.vi" Type="VI" URL="../Diagnostic/python_test.vi"/>
 		<Item Name="ScanDelay_FTIR_AcquireInterferogram.vi" Type="VI" URL="../ScanDelay_FTIR_AcquireInterferogram.vi"/>
 		<Item Name="ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi" Type="VI" URL="../ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi"/>
@@ -369,6 +370,7 @@
 			<Item Name="nilvaiu.dll" Type="Document" URL="nilvaiu.dll">
 				<Property Name="NI.PreserveRelativePath" Type="Bool">true</Property>
 			</Item>
+			<Item Name="Thorlabs.MotionControl.Benchtop.StepperMotorCLI.dll" Type="Document" URL="../Thorlabs.MotionControl.Benchtop.StepperMotorCLI.dll"/>
 			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="../Thorlabs.MotionControl.Controls.dll"/>
 			<Item Name="Thorlabs.MotionControl.FilterFlipperCLI.dll" Type="Document" URL="../Thorlabs.MotionControl.FilterFlipperCLI.dll"/>
 			<Item Name="Thorlabs.MotionControl.KCube.StepperMotorCLI.dll" Type="Document" URL="../Thorlabs.MotionControl.KCube.StepperMotorCLI.dll"/>

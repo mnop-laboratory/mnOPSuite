@@ -10,24 +10,22 @@ def fit_phase_leakage(leakage_arr,amps,n=5):
     amps = amps[np.isfinite(leakage_arr)]
     leakage_arr = leakage_arr[np.isfinite(leakage_arr)]
 
-    global p
+    global p,best_amp
     if n>len(amps)-1: n=len(amps)-1
     p=np.polyfit(x=amps,y=leakage_arr,deg=n)
 
     fit = np.polyval(p,amps)
 
+    amps_dense = np.linspace(np.min(amps),np.max(amps),10*len(amps))
+    vals = np.polyval(p,amps_dense)
+    best_amp = amps_dense[np.argmin(vals)]
+
     return fit
 
 def get_best_amp(amps):
 
-    global p
-    to_minimize=lambda amp: np.polyval(p,amp)
+    global best_amp
 
-    bounds0=(np.min(amps),np.max(amps))
-    result = minimize(to_minimize,
-                      x0=np.mean(amps),
-                      bounds=(bounds0,))
-
-    return result.x
+    return best_amp
 
 

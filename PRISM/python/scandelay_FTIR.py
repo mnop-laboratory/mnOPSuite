@@ -559,7 +559,7 @@ def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=2000):
     #centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
     #imax_ind = np.argmin((centerd - d) ** 2)
     #w = np.roll(w, imax_ind - wmax_ind, axis=0)
-    #w = 1 #We are disabling the windowing for now
+    w = 1 #We are disabling the windowing for now
 
     v *= w
     v = AWA(v, axes=[d])
@@ -862,9 +862,10 @@ class SpectralProcessor(object):
     def level_phase(f, s, order=1, manual_offset=0):
 
         p = np.unwrap(np.angle(s))
-        m = np.polyfit(x=f, y=p, deg=order, w=np.abs(s)**2)
-        m[-1]=0 #no overall phase offsets
-        p -= np.polyval(m, f)
+        if order:
+            m = np.polyfit(x=f, y=p, deg=order, w=np.abs(s)**2)
+            m[-1]=0 #no overall phase offsets
+            p -= np.polyval(m, f)
 
         if manual_offset:
             p += manual_offset * f/np.mean(np.abs(f))
@@ -1209,13 +1210,26 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                           view_phase_alignment=False)
 
     if piecewise_flattening:
-        phase = SP.get_phase(f, snorm, level_phase=True, manual_offset=0)
-        offset,params = numrec.PiecewiseLinearFit(f,phase,nbreakpoints=piecewise_flattening,error_exp=0.25)
+        phase = SP.get_phase(f, snorm, level_phase=False)
+        #TODO: only derive offset by fitting *difference* between optimized phase and non-optimized one
+        if not optimize_phase: to_fit = phase
+        else:
+            # We want to bring "aligned" phase closer to its unadulterated version via piecewise slopes
+            f, _, snorm0 = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
+                             valid_thresh=valid_thresh,
+                             optimize_BB=optimize_BB,
+                             optimize_phase=False,
+                             view_phase_alignment=False)
+            phase0 = SP.get_phase(f, snorm0, level_phase=False)
+            to_fit = phase - phase0
+
+        offset,params = numrec.PiecewiseLinearFit(f,to_fit,nbreakpoints=piecewise_flattening,error_exp=0.25)
         phase -= offset
         snorm = snorm_abs*np.exp(1j*phase)
 
     #Now finally apply manual offset
-    phase=SP.get_phase(f, snorm, level_phase=True, manual_offset=phase_offset)
+    phase=SP.get_phase(f, snorm, level_phase=True,
+                       order=0, manual_offset=phase_offset) #Only level using the offset we apply
 
     # `get_phase` will apply some phase leveling
     return np.array([f,
