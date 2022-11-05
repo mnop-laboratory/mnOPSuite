@@ -193,7 +193,7 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
     intfgs_arr = np.array(intfgs_arr)
     Ncycles = len(intfgs_arr) // 2
     Nsamples = intfgs_arr.shape[1]
-    x_smoothing = np.min((Nsamples / 100, 100))
+    x_smoothing = np.max((Nsamples / 200, 100))
 
     # --- Process data
     all_xs_fwd = []
@@ -779,7 +779,8 @@ class SpectralProcessor(object):
     @classmethod
     def align_and_envelope_spectra(cls,spectra, spectra_ref,
                                    apply_envelope=True,expand_envelope=1,
-                                   BB_phase=False, valid_thresh=.01,
+                                   BB_phase=False,
+                                   smoothing=None,valid_thresh=.01,
                                    factor=1, optimize_BB=False,
                                    verbose=True):
 
@@ -814,6 +815,7 @@ class SpectralProcessor(object):
             sabs = spectra[Nrows * i + 1]
             sphase = spectra[Nrows * i + 2]
             s = sabs * np.exp(1j * sphase)
+            if smoothing: s = numrec.smooth(s,window_len=smoothing,axis=0)
 
             # In case we have invalid entries (zeros), remove them
             where_valid = np.isfinite(f) * (f > 0)
@@ -830,6 +832,7 @@ class SpectralProcessor(object):
                 s_ref = sabs_ref * np.exp(1j * sphase_ref)
             else:
                 s_ref = sabs_ref
+            if smoothing: s_ref = numrec.smooth(s_ref,window_len=smoothing,axis=0)
 
             # In case we have invalid entries (zeros), remove them
             where_valid = np.isfinite(f_ref) * (f_ref > 0)
@@ -1017,6 +1020,7 @@ class SpectralProcessor(object):
     def process_spectrum(self,target='sample',
                         apply_envelope=True,
                         envelope_width=1,
+                         smoothing=None,
                         valid_thresh=.01,
                         optimize_BB=False,
                         optimize_phase=True,
@@ -1037,7 +1041,9 @@ class SpectralProcessor(object):
                                                                    expand_envelope=envelope_width,
                                                                    factor=1,
                                                                    optimize_BB=optimize_BB,
+                                                                  smoothing=smoothing,
                                                                    valid_thresh=valid_thresh)
+
         self.f0 = f0
         self.processed_spectra = spectra
         self.processed_spectra_BB = spectra_BB
@@ -1112,6 +1118,7 @@ class SpectralProcessor(object):
                  optimize_phase=True,
                  apply_envelope=True,
                  envelope_width=1,
+                 smoothing=None,
                  valid_thresh=.01,
                  view_phase_alignment=False,
                  abs_only=False):
@@ -1122,6 +1129,7 @@ class SpectralProcessor(object):
                                                                 optimize_BB=optimize_BB,
                                                                  apply_envelope=apply_envelope,
                                                                 envelope_width=envelope_width,
+                                                                smoothing=smoothing,
                                                                 valid_thresh=valid_thresh,
                                                                 optimize_phase=optimize_phase,
                                                                 view_phase_alignment=view_phase_alignment)
@@ -1132,16 +1140,19 @@ class SpectralProcessor(object):
                                                                 optimize_BB=optimize_BB,
                                                                  apply_envelope=apply_envelope,
                                                                 envelope_width=envelope_width,
+                                                                smoothing=smoothing,
                                                                 valid_thresh=valid_thresh,
                                                                 optimize_phase=optimize_phase,
                                                                 view_phase_alignment=view_phase_alignment)
 
         self.f_norm_abs, self.norm_spectrum_abs = self.normalize_spectrum(self.f_sample, [self.sample_spectrum_abs],
-                                                                  self.f_ref, [self.ref_spectrum_abs],
-                                                                  abs=True, abs_ref=True, valid_thresh=valid_thresh)
+                                                                            self.f_ref, [self.ref_spectrum_abs],
+                                                                            abs=True, abs_ref=True,
+                                                                             valid_thresh=valid_thresh)
         self.f_norm, self.norm_spectrum = self.normalize_spectrum(self.f_sample, [self.sample_spectrum],
                                                                   self.f_ref, [self.ref_spectrum],
-                                                                  abs=False, abs_ref=False, valid_thresh=valid_thresh)
+                                                                  abs=False, abs_ref=False,
+                                                                  valid_thresh=valid_thresh)
 
         self.norm_spectrum_abs = interp1d(x=self.f_norm_abs,
                                    y=self.norm_spectrum_abs,
@@ -1198,12 +1209,15 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                        ref_spectra, ref_BB_spectra,
                        apply_envelope=True, envelope_width=1,
                        optimize_BB=True, optimize_phase=True,
-                       phase_offset=0,valid_thresh=.01, piecewise_flattening=0):
+                       phase_offset=0,
+                        smoothing=None,valid_thresh=.01,
+                        piecewise_flattening=0):
 
     SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
                            ref_spectra, ref_BB_spectra)
 
     f, snorm_abs,snorm = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
+                            smoothing=smoothing,
                           valid_thresh=valid_thresh,
                           optimize_BB=optimize_BB,
                           optimize_phase=optimize_phase,
@@ -1211,17 +1225,18 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
 
     if piecewise_flattening:
         phase = SP.get_phase(f, snorm, level_phase=False)
-        #TODO: only derive offset by fitting *difference* between optimized phase and non-optimized one
-        if not optimize_phase: to_fit = phase
+        to_fit = phase
+        """ if not optimize_phase: to_fit = phase
         else:
             # We want to bring "aligned" phase closer to its unadulterated version via piecewise slopes
             f, _, snorm0 = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
+                              smoothing=smoothing,
                              valid_thresh=valid_thresh,
                              optimize_BB=optimize_BB,
                              optimize_phase=False,
                              view_phase_alignment=False)
             phase0 = SP.get_phase(f, snorm0, level_phase=False)
-            to_fit = phase - phase0
+            to_fit = phase - phase0"""
 
         offset,params = numrec.PiecewiseLinearFit(f,to_fit,nbreakpoints=piecewise_flattening,error_exp=0.25)
         phase -= offset
