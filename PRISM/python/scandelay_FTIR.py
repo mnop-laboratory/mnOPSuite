@@ -567,8 +567,8 @@ def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=2000):
 
     # This applies knowledge that d does not start at zero, but min value is meaningful
     f = s.axes[0]
-    pcorr = +2 * np.pi * (np.min(d)) * f
-    s *= np.exp(1j * pcorr)
+    pcorr = 2 * np.pi * (np.min(d)) * f
+    s *= np.exp(-1j * pcorr) #Since we are in a `exp(-1j*..)` basis
 
     posf=(f>0)
     if fmax is not None: posf*=(f<fmax)
@@ -661,6 +661,32 @@ class SpectralProcessor(object):
         spectrum[~np.isfinite(spectrum)] = 0
 
         return spectrum
+
+    @staticmethod
+    def windowed_spectrum(f,scomplex,window=np.blackman):
+
+        if window is True:
+            window = np.blackman
+
+        ## Turn it into ifft-consistent spectrum
+        faxis = np.append(-f[::-1], f) #We assume we have only positive frequencies, but need negative ones too
+        s = np.append(np.conj(scomplex[::-1]), scomplex)
+        s = num.Spectrum(AWA(s, axes=[faxis], axis_names=['X Frequency']))
+
+        ## Compute and window interferogram
+        intfg = s.get_inverse()
+        xs = intfg.axes[0]
+        xcenter = np.sum(intfg ** 2 * xs) / np.sum(intfg ** 2)
+        w = window(len(intfg))
+        w = np.roll(w, np.argmin(xs - xcenter) - np.argmax(w), axis=0) # Roll window center to intfg maximum
+        intfgw = intfg * w
+        intfgw *= np.sqrt(np.sum(intfg ** 2) / np.sum(intfgw ** 2))  # Do not let window change overall energy
+
+        ## Convert back to spectrum
+        sout = num.Spectrum(intfgw, axis=0)
+        sout = sout.interpolate_axis(f, axis=0, bounds_error=False, fill_value=0)
+
+        return np.array(sout,dtype=np.complex)
 
     @classmethod
     def normalize_spectrum(cls, f, spectra,
@@ -777,10 +803,10 @@ class SpectralProcessor(object):
         return np.mean(np.abs(d1) ** (1 / 2))  # minimize first derivative
 
     @classmethod
-    def align_and_envelope_spectra(cls,spectra, spectra_ref,
-                                   apply_envelope=True,expand_envelope=1,
+    def align_and_envelope_spectra(cls, spectra, spectra_ref,
+                                   apply_envelope=True, envelope_width=1,
                                    BB_phase=False,
-                                   smoothing=None,valid_thresh=.01,
+                                   valid_thresh=.01, window=np.blackman,
                                    factor=1, optimize_BB=False,
                                    verbose=True):
 
@@ -814,8 +840,10 @@ class SpectralProcessor(object):
             f = spectra[Nrows * i]
             sabs = spectra[Nrows * i + 1]
             sphase = spectra[Nrows * i + 2]
+
+            ## window if necessary
             s = sabs * np.exp(1j * sphase)
-            if smoothing: s = numrec.smooth(s,window_len=smoothing,axis=0)
+            if window: s = cls.windowed_spectrum(f,s)
 
             # In case we have invalid entries (zeros), remove them
             where_valid = np.isfinite(f) * (f > 0)
@@ -827,12 +855,14 @@ class SpectralProcessor(object):
             f_ref = spectra_ref[Nrows * i]
             sabs_ref = spectra_ref[Nrows * i + 1]
             sphase_ref = spectra_ref[Nrows * i + 2]
-            # Discard the BB phase if we don't want it
-            if BB_phase:
-                s_ref = sabs_ref * np.exp(1j * sphase_ref)
-            else:
-                s_ref = sabs_ref
-            if smoothing: s_ref = numrec.smooth(s_ref,window_len=smoothing,axis=0)
+
+            # window if necessary
+            s_ref = sabs_ref * np.exp(1j * sphase_ref)
+            if window: s_ref = cls.windowed_spectrum(f,s_ref)
+
+            # Discard phase if we don't want it
+            if not BB_phase:
+                s_ref = np.abs(s_ref)
 
             # In case we have invalid entries (zeros), remove them
             where_valid = np.isfinite(f_ref) * (f_ref > 0)
@@ -843,7 +873,7 @@ class SpectralProcessor(object):
             env_params.append(spectra_ref[Nrows * i + 4][:3])
 
         # Optimize calibration between BB and sample, if called for
-        args = (f0, ss, ss_interp_ref, env_params, apply_envelope, expand_envelope,valid_thresh)
+        args = (f0, ss, ss_interp_ref, env_params, apply_envelope, envelope_width, valid_thresh)
         if optimize_BB:
             result = minimize(cls.calibration_to_minimize, (factor,), method='Nelder-Mead', args=args)
             factor = result.x[0]
@@ -939,9 +969,13 @@ class SpectralProcessor(object):
         return phases
 
     new_phase_alignment = True
+    coincidence_exponent=2
 
     def phase_aligned_spectrum(cls, f, spectra, verbose=False,
-                               coincidence_exponent=2):
+                               coincidence_exponent=None):
+
+        if coincidence_exponent is None: coincidence_exponent=cls.coincidence_exponent
+        print(coincidence_exponent)
 
         def aligned_spectrum(stot,s):
 
@@ -1020,8 +1054,8 @@ class SpectralProcessor(object):
     def process_spectrum(self,target='sample',
                         apply_envelope=True,
                         envelope_width=1,
-                         smoothing=None,
                         valid_thresh=.01,
+                        window=np.blackman,
                         optimize_BB=False,
                         optimize_phase=True,
                         view_phase_alignment=False,
@@ -1037,12 +1071,11 @@ class SpectralProcessor(object):
 
         print('Aligning and enveloping spectra...')
         f0, spectra, spectra_BB = self.align_and_envelope_spectra(all_spectra, all_spectra_BB,
-                                                                   apply_envelope=apply_envelope,
-                                                                   expand_envelope=envelope_width,
-                                                                   factor=1,
-                                                                   optimize_BB=optimize_BB,
-                                                                  smoothing=smoothing,
-                                                                   valid_thresh=valid_thresh)
+                                                                  apply_envelope=apply_envelope,
+                                                                  envelope_width=envelope_width,
+                                                                  factor=1,window=window,
+                                                                  optimize_BB=optimize_BB,
+                                                                  valid_thresh=valid_thresh)
 
         self.f0 = f0
         self.processed_spectra = spectra
@@ -1078,11 +1111,11 @@ class SpectralProcessor(object):
 
                 # Now plot directly the corrected phases
                 plt.subplot(212)
-                phases0 = self.get_phases_of_spectra(f0,spectra0,
+                phases0 = self.get_phases(f0,spectra0,
                                                      threshold=.1,
                                                      ps=None,
                                                      level=True,order=view_phase_alignment_leveling)
-                phases = self.get_phases_of_spectra(f0,spectra,
+                phases = self.get_phases(f0,spectra,
                                                      threshold=.1,
                                                      ps=None,
                                                     level=True,order=view_phase_alignment_leveling)
@@ -1120,6 +1153,7 @@ class SpectralProcessor(object):
                  envelope_width=1,
                  smoothing=None,
                  valid_thresh=.01,
+                 window=np.blackman,
                  view_phase_alignment=False,
                  abs_only=False):
 
@@ -1129,8 +1163,8 @@ class SpectralProcessor(object):
                                                                 optimize_BB=optimize_BB,
                                                                  apply_envelope=apply_envelope,
                                                                 envelope_width=envelope_width,
-                                                                smoothing=smoothing,
                                                                 valid_thresh=valid_thresh,
+                                                                window=window,
                                                                 optimize_phase=optimize_phase,
                                                                 view_phase_alignment=view_phase_alignment)
 
@@ -1140,8 +1174,8 @@ class SpectralProcessor(object):
                                                                 optimize_BB=optimize_BB,
                                                                  apply_envelope=apply_envelope,
                                                                 envelope_width=envelope_width,
-                                                                smoothing=smoothing,
                                                                 valid_thresh=valid_thresh,
+                                                                window=window,
                                                                 optimize_phase=optimize_phase,
                                                                 view_phase_alignment=view_phase_alignment)
 
@@ -1157,6 +1191,12 @@ class SpectralProcessor(object):
         self.norm_spectrum_abs = interp1d(x=self.f_norm_abs,
                                    y=self.norm_spectrum_abs,
                                    **interp_kwargs)(self.f_norm)
+
+        if smoothing:
+            self.norm_spectrum_abs = numrec.smooth(self.norm_spectrum_abs,
+                                                   window_len=smoothing, axis=0)
+            self.norm_spectrum = numrec.smooth(self.norm_spectrum,
+                                                   window_len=smoothing, axis=0)
 
         return self.f_norm, self.norm_spectrum_abs, self.norm_spectrum
 
