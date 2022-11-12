@@ -543,7 +543,7 @@ def fit_envelope(f,sabs,fmin=400,fmax=3500):
 
     return envelope,envelope_params
 
-def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=2000):
+def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=3000):
 
     v,t=np.array(a)
     c=3e8 #speed of light in m/s
@@ -565,10 +565,12 @@ def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=2000):
     v = AWA(v, axes=[d])
     s = num.Spectrum(v, axis=0)
 
-    # This applies knowledge that d does not start at zero, but min value is meaningful
+    # This phase is a problem for subsequent inverse FFT, since intended origin is unknown
+    # Instead, assume spectra whose phases are to be compared were acquired with the exact same x-axes
+    """# This applies knowledge that d does not start at zero, but min value is meaningful
     f = s.axes[0]
     pcorr = 2 * np.pi * (np.min(d)) * f
-    s *= np.exp(-1j * pcorr) #Since we are in a `exp(-1j*..)` basis
+    s *= np.exp(-1j * pcorr) #Since we are in a `exp(-1j*..)` basis"""
 
     posf=(f>0)
     if fmax is not None: posf*=(f<fmax)
@@ -675,10 +677,11 @@ class SpectralProcessor(object):
 
         ## Compute and window interferogram
         intfg = s.get_inverse()
-        xs = intfg.axes[0]
+        # Do not permit variability of window due to uncertainty in peak intensity
+        """xs = intfg.axes[0]
         xcenter = np.sum(intfg ** 2 * xs) / np.sum(intfg ** 2)
         w = window(len(intfg))
-        w = np.roll(w, np.argmin(xs - xcenter) - np.argmax(w), axis=0) # Roll window center to intfg maximum
+        w = np.roll(w, np.argmin(xs - xcenter) - np.argmax(w), axis=0) # Roll window center to intfg maximum"""
         intfgw = intfg * w
         intfgw *= np.sqrt(np.sum(intfg ** 2) / np.sum(intfgw ** 2))  # Do not let window change overall energy
 
@@ -1035,7 +1038,7 @@ class SpectralProcessor(object):
                  ref_spectra,
                  ref_BB_spectra):
 
-        Nrows = 5
+        self.Nrows = Nrows = 5
         assert len(sample_spectra) == len(sample_BB_spectra), \
             "We require the same number of spectrum accumulations for both sample and sample bright-beam!"
         assert len(sample_spectra) % Nrows == 0, 'Input spectra must come as stacked groups of %i row vectors' % Nrows
@@ -1051,6 +1054,25 @@ class SpectralProcessor(object):
         self.ref_spectra = np.array(ref_spectra)
         self.ref_BB_spectra = np.array(ref_BB_spectra)
 
+    def select_spectrum(self,idx,target='sample'):
+        #Spectra should share same frequency axes, but it is not guaranteed,
+        # so interpolate them to same frquency axis
+
+        options = ['sample','sample_BB','reference','reference_BB']
+        assert target in options,'`target` must be one of %s'%options
+
+        if target==options[0]: spectra=self.sample_spectra
+        elif target==options[1]: spectra=self.sample_BB_spectra
+        elif target==options[2]: spectra=self.ref_spectra
+        elif target==options[3]: spectra=self.ref_spectra_BB
+
+        f,s,p = spectra[self.Nrows*idx : self.Nrows*idx+3]
+
+        s = s*np.exp(1j*p)
+        s = AWA(s,axes=[f],axis_names=['X Frequency'])
+
+        return num.Spectrum(s,axis=0)
+
     def process_spectrum(self,target='sample',
                         apply_envelope=True,
                         envelope_width=1,
@@ -1060,6 +1082,9 @@ class SpectralProcessor(object):
                         optimize_phase=True,
                         view_phase_alignment=False,
                          view_phase_alignment_leveling=6):
+        """This normalizes sample or reference spectra (based on `target`)
+        to their respective bright beam spectra, while enveloping,
+        optimizing phase alignment, and windowing spectra, if desired."""
 
         assert target=='sample' or target=='reference'
         if target=='sample':
@@ -1156,6 +1181,9 @@ class SpectralProcessor(object):
                  window=np.blackman,
                  view_phase_alignment=False,
                  abs_only=False):
+        """This normalizes sample and reference spectra to their
+        respective bright-beam spectra, and then normalizes these
+        two BB-normalized spectra to each other."""
 
         print('Processing sample spectra...')
         self.f_sample,self.sample_spectrum_abs,self.sample_spectrum\
@@ -1248,7 +1276,7 @@ def BB_referenced_spectrum(spectra,spectra_BB,
 def normalized_spectrum(sample_spectra, sample_BB_spectra,
                        ref_spectra, ref_BB_spectra,
                        apply_envelope=True, envelope_width=1,
-                       optimize_BB=True, optimize_phase=True,
+                       window=False, optimize_phase=True,
                        phase_offset=0,
                         smoothing=None,valid_thresh=.01,
                         piecewise_flattening=0):
@@ -1259,7 +1287,8 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
     f, snorm_abs,snorm = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
                             smoothing=smoothing,
                           valid_thresh=valid_thresh,
-                          optimize_BB=optimize_BB,
+                            window=window,
+                          optimize_BB=False,
                           optimize_phase=optimize_phase,
                           view_phase_alignment=False)
 
