@@ -554,7 +554,7 @@ def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=3000):
 
     v = v-np.mean(v)
     v *= gain
-    w = np.blackman(len(v))
+    # w = np.blackman(len(v))
     #wmax_ind = np.argmax(w) #Let's roll window to position of maximum weight in interferogram
     #centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
     #imax_ind = np.argmin((centerd - d) ** 2)
@@ -567,8 +567,8 @@ def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=3000):
 
     # This phase is a problem for subsequent inverse FFT, since intended origin is unknown
     # Instead, assume spectra whose phases are to be compared were acquired with the exact same x-axes
-    """# This applies knowledge that d does not start at zero, but min value is meaningful
     f = s.axes[0]
+    """# This applies knowledge that d does not start at zero, but min value is meaningful
     pcorr = 2 * np.pi * (np.min(d)) * f
     s *= np.exp(-1j * pcorr) #Since we are in a `exp(-1j*..)` basis"""
 
@@ -677,17 +677,21 @@ class SpectralProcessor(object):
 
         ## Compute and window interferogram
         intfg = s.get_inverse()
+        w = window(len(intfg))
         # Do not permit variability of window due to uncertainty in peak intensity
         """xs = intfg.axes[0]
         xcenter = np.sum(intfg ** 2 * xs) / np.sum(intfg ** 2)
-        w = window(len(intfg))
         w = np.roll(w, np.argmin(xs - xcenter) - np.argmax(w), axis=0) # Roll window center to intfg maximum"""
         intfgw = intfg * w
-        intfgw *= np.sqrt(np.sum(intfg ** 2) / np.sum(intfgw ** 2))  # Do not let window change overall energy
 
         ## Convert back to spectrum
         sout = num.Spectrum(intfgw, axis=0)
-        sout = sout.interpolate_axis(f, axis=0, bounds_error=False, fill_value=0)
+        sout = sout.interpolate_axis(f, axis=0, **interp_kwargs)
+
+        # Do not let window change overall power
+        Pactual = np.sum(np.abs(sout)**2)
+        Pdesired = np.sum(np.abs(scomplex)**2)
+        sout *= np.sqrt( Pdesired/Pactual )
 
         return np.array(sout,dtype=np.complex)
 
@@ -840,13 +844,11 @@ class SpectralProcessor(object):
         for i in range(Nspectra):
 
             ## Analyte spectrum components
-            f = spectra[Nrows * i]
-            sabs = spectra[Nrows * i + 1]
-            sphase = spectra[Nrows * i + 2]
+            f,sabs,sphase = spectra[Nrows * i:Nrows * i+3]
 
             ## window if necessary
             s = sabs * np.exp(1j * sphase)
-            if window: s = cls.windowed_spectrum(f,s)
+            if window: s = cls.windowed_spectrum(f,s,window=window)
 
             # In case we have invalid entries (zeros), remove them
             where_valid = np.isfinite(f) * (f > 0)
@@ -855,13 +857,11 @@ class SpectralProcessor(object):
             ss.append(interp1d(f, s, **interp_kwargs)(f0))
 
             ## Reference spectrum components
-            f_ref = spectra_ref[Nrows * i]
-            sabs_ref = spectra_ref[Nrows * i + 1]
-            sphase_ref = spectra_ref[Nrows * i + 2]
+            f_ref,sabs_ref,sphase_ref = spectra_ref[Nrows * i:Nrows * i+3]
 
             # window if necessary
             s_ref = sabs_ref * np.exp(1j * sphase_ref)
-            if window: s_ref = cls.windowed_spectrum(f,s_ref)
+            if window: s_ref = cls.windowed_spectrum(f,s_ref,window=window)
 
             # Discard phase if we don't want it
             if not BB_phase:
@@ -1054,7 +1054,7 @@ class SpectralProcessor(object):
         self.ref_spectra = np.array(ref_spectra)
         self.ref_BB_spectra = np.array(ref_BB_spectra)
 
-    def select_spectrum(self,idx,target='sample'):
+    def select_spectrum(self,idx,target='sample',window=None):
         #Spectra should share same frequency axes, but it is not guaranteed,
         # so interpolate them to same frquency axis
 
@@ -1067,10 +1067,10 @@ class SpectralProcessor(object):
         elif target==options[3]: spectra=self.ref_spectra_BB
 
         f,s,p = spectra[self.Nrows*idx : self.Nrows*idx+3]
-
         s = s*np.exp(1j*p)
-        s = AWA(s,axes=[f],axis_names=['X Frequency'])
+        if window: s = self.windowed_spectrum(f, s, window=window)
 
+        s = AWA(s,axes=[f],axis_names=['X Frequency'])
         return num.Spectrum(s,axis=0)
 
     def process_spectrum(self,target='sample',
