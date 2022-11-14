@@ -542,7 +542,7 @@ class SpectralProcessor(object):
         pavg = np.sum(p*np.abs(s)**2) / np.sum(np.abs(s)**2)
         p -= 2*np.pi * np.round(pavg/(2*np.pi))
 
-        return p
+        return p.real
 
     @classmethod
     def get_phases(cls,f,spectra,
@@ -612,6 +612,7 @@ class SpectralProcessor(object):
 
         if abs:
             spectrum = np.sum([np.abs(s) for s in spectra], axis=0)
+            spectrum = spectrum.real
         else:
             spectrum = np.sum([s for s in spectra], axis=0)
 
@@ -1082,7 +1083,7 @@ class SpectralProcessor(object):
                                                                   valid_thresh=valid_thresh)
 
         self.norm_spectrum_abs = self.interpolate_spectrum(self.norm_spectrum_abs,
-                                                           self.f_norm_abs,self.f_norm)
+                                                           self.f_norm_abs,self.f_norm).real
 
         if smoothing:
             self.norm_spectrum_abs = numrec.smooth(self.norm_spectrum_abs,
@@ -1110,9 +1111,8 @@ def accumulate_spectra(spectra, apply_envelope=True, expand_envelope=1):
 
 def BB_referenced_spectrum(spectra,spectra_BB,
                           apply_envelope=True, envelope_width=1,
-                           optimize_BB=False,
-                          optimize_phase=False,valid_thresh=.01,
-                           abs_only=True):
+                           window=False,align_phase=False,
+                           valid_thresh=.01):
 
     try:
         SP=SpectralProcessor(spectra,spectra_BB,
@@ -1123,12 +1123,15 @@ def BB_referenced_spectrum(spectra,spectra_BB,
                                             apply_envelope=apply_envelope,
                                             envelope_width=envelope_width,
                                             valid_thresh=valid_thresh,
-                                            optimize_BB=optimize_BB,
-                                            align_phase=optimize_phase,
+                                            window=window,
+                                            align_phase=align_phase,
                                             view_phase_alignment=False)
+
+        phase = SP.get_phase(f, spectrum, level_phase=True)
+
         return np.array([f,
-                         spectrum_abs,
-                         SP.get_phase(f, spectrum, level_phase=True)])
+                         spectrum_abs.real,
+                         phase.real],dtype=np.float)
     except:
         error_text = str(traceback.format_exc())
         error_file = os.path.join(diagnostic_dir,'BB_referenced_spectrum.err')
@@ -1145,41 +1148,51 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                         smoothing=None, valid_thresh=.01,
                         piecewise_flattening=0):
 
-    SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
-                           ref_spectra, ref_BB_spectra)
+    try:
+        SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
+                               ref_spectra, ref_BB_spectra)
 
-    f, snorm_abs,snorm = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
-                            smoothing=smoothing,
-                            valid_thresh=valid_thresh,
-                            window=window,
-                            optimize_BB=False,
-                            align_phase=align_phase,
-                            view_phase_alignment=False)
+        f, snorm_abs,snorm = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
+                                smoothing=smoothing,
+                                valid_thresh=valid_thresh,
+                                window=window,
+                                optimize_BB=False,
+                                align_phase=align_phase,
+                                view_phase_alignment=False)
 
-    if piecewise_flattening:
-        phase = SP.get_phase(f, snorm, level_phase=False)
-        to_fit = phase
-        """ if not optimize_phase: to_fit = phase
-        else:
-            # We want to bring "aligned" phase closer to its unadulterated version via piecewise slopes
-            f, _, snorm0 = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
-                              smoothing=smoothing,
-                             valid_thresh=valid_thresh,
-                             optimize_BB=optimize_BB,
-                             optimize_phase=False,
-                             view_phase_alignment=False)
-            phase0 = SP.get_phase(f, snorm0, level_phase=False)
-            to_fit = phase - phase0"""
+        if piecewise_flattening:
+            phase = SP.get_phase(f, snorm, level_phase=False)
+            to_fit = phase
+            """ if not optimize_phase: to_fit = phase
+            else:
+                # We want to bring "aligned" phase closer to its unadulterated version via piecewise slopes
+                f, _, snorm0 = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
+                                  smoothing=smoothing,
+                                 valid_thresh=valid_thresh,
+                                 optimize_BB=optimize_BB,
+                                 optimize_phase=False,
+                                 view_phase_alignment=False)
+                phase0 = SP.get_phase(f, snorm0, level_phase=False)
+                to_fit = phase - phase0"""
 
-        offset,params = numrec.PiecewiseLinearFit(f,to_fit,nbreakpoints=piecewise_flattening,error_exp=0.25)
-        phase -= offset
-        snorm = snorm_abs*np.exp(1j*phase)
+            offset,params = numrec.PiecewiseLinearFit(f,to_fit,nbreakpoints=piecewise_flattening,error_exp=2)
+            phase -= offset
+            snorm = snorm_abs*np.exp(1j*phase)
 
-    #Now finally apply manual offset
-    phase=SP.get_phase(f, snorm, level_phase=True,
-                       order=0, manual_offset=phase_offset) #Only level using the offset we apply
+        #Now finally apply manual offset
+        phase=SP.get_phase(f, snorm, level_phase=True,
+                           order=0, manual_offset=phase_offset) #Only level using the offset we apply
 
-    # `get_phase` will apply some phase leveling
-    return np.array([f,
-                     snorm_abs,
-                     phase])
+        # `get_phase` will apply some phase leveling
+        return np.array([f,
+                         snorm_abs.real,
+                         phase.real], dtype=np.float)
+
+    except:
+
+        #--- Dump the error
+        error_text = str(traceback.format_exc())
+        error_file = os.path.join(diagnostic_dir,'normalized_spectrum.err')
+        with open(error_file,'w') as f: f.write(error_text)
+
+        return False
