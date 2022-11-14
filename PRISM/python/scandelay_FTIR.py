@@ -26,7 +26,7 @@ def test(intfgs_arr, delay_calibration_factor=1,
     try:
         file=os.path.join(diagnostic_dir,'intfg_err.txt')
         intfgs_arr = np.loadtxt(file)
-        result =align_interferograms_new(intfgs_arr, delay_calibration_factor=-2.5,
+        result =align_interferograms_base(intfgs_arr, delay_calibration_factor=-2.5,
                                      shift0=-10,optimize_shift=True,shift_range=10,
                                      flattening_order=10,noise=0)
         return str(1)
@@ -455,124 +455,6 @@ def fourier_xform_fwd_bwd(a,tsubtract=0,envelope=True):
 
 class SpectralProcessor(object):
 
-    ##########################
-    # - General static methods
-    ##########################
-    @staticmethod
-    def summed_spectrum(spectra, abs=False):
-
-        if abs:
-            spectrum = np.sum([np.abs(s) for s in spectra], axis=0)
-        else:
-            spectrum = np.sum([s for s in spectra], axis=0)
-
-        spectrum[~np.isfinite(spectrum)] = 0
-
-        return spectrum
-
-    @staticmethod
-    def windowed_spectrum(f,scomplex,window=np.blackman):
-
-        if window is True:
-            window = np.blackman
-
-        ## Turn it into ifft-consistent spectrum
-        faxis = np.append(-f[::-1], f) #We assume we have only positive frequencies, but need negative ones too
-        s = np.append(np.conj(scomplex[::-1]), scomplex)
-        s = num.Spectrum(AWA(s, axes=[faxis], axis_names=['X Frequency']))
-
-        ## Compute and window interferogram
-        intfg = s.get_inverse()
-        w = window(len(intfg))
-        # Do not permit variability of window due to uncertainty in peak intensity
-        """xs = intfg.axes[0]
-        xcenter = np.sum(intfg ** 2 * xs) / np.sum(intfg ** 2)
-        w = np.roll(w, np.argmin(xs - xcenter) - np.argmax(w), axis=0) # Roll window center to intfg maximum"""
-        intfgw = intfg * w
-
-        ## Convert back to spectrum
-        sout = num.Spectrum(intfgw, axis=0)
-        sout = sout.interpolate_axis(f, axis=0, **interp_kwargs)
-
-        # Do not let window change overall power
-        Pactual = np.sum(np.abs(sout)**2)
-        Pdesired = np.sum(np.abs(scomplex)**2)
-        sout *= np.sqrt( Pdesired/Pactual )
-
-        return np.array(sout,dtype=np.complex)
-
-    @classmethod
-    def normalize_spectrum(cls, f, spectra,
-                           f_ref, spectra_ref,
-                           abs=False, abs_ref=True,
-                           valid_thresh=.01):
-
-        spectrum = cls.summed_spectrum(spectra, abs=abs)
-        spectrum_ref = cls.summed_spectrum(spectra_ref, abs=abs_ref)
-        spectrum_ref = interp1d(x=f_ref, y=spectrum_ref,
-                                **interp_kwargs)(f)
-
-        thresh = valid_thresh * np.abs(spectrum_ref).max()
-        where_valid = np.abs(spectrum_ref) > thresh
-        snorm = (spectrum / spectrum_ref)[where_valid]
-        f = f[where_valid]
-
-        return f, snorm
-
-    @classmethod
-    def accumulate_spectra(cls, spectra,
-                           apply_envelope=True,
-                           expand_envelope=1,
-                           abs=True):
-
-        spectra = np.array(spectra)
-
-        Nrows = 5
-
-        assert len(spectra) % Nrows == 0, 'Input spectra must come as stacked groups of %i row vectors' % Nrows
-        Nspectra = np.max((len(spectra) // Nrows, 1))
-
-        # Establish some mutual frequency axis
-
-        all_fs = np.append([], [spectra[Nrows * i] for i in range(Nspectra)])
-        Nf = len(all_fs) // (2 * Nspectra)
-        f0 = np.linspace(np.min(all_fs),
-                         np.max(all_fs),
-                         Nf)
-
-        # Collect all the spectra and the envelopes
-        ss = []
-        for i in range(Nspectra):
-
-            ## Analyte spectrum components
-            f = spectra[Nrows * i]
-            sabs = spectra[Nrows * i + 1]
-            sphase = spectra[Nrows * i + 2]
-            env_params = spectra[Nrows * i + 4][:3]
-
-            s = sabs * np.exp(1j * sphase)
-
-            # In case we have invalid entries (zeros), remove them
-            where_valid = np.isfinite(f) * (f > 0)
-            f = f[where_valid]
-            s = s[where_valid]
-
-            s = interp1d(f, s, **interp_kwargs)(f0)
-            if apply_envelope:
-                env = spectral_envelope(f0, *env_params,
-                                        expand_envelope=expand_envelope)
-                env /= env.max()
-                s *= env
-
-            ss.append(s)
-
-        spectrum_abs = cls.summed_spectrum(ss, abs=True)
-        spectrum_phase = cls.get_phase(f0,
-                                       cls.summed_spectrum(ss,abs=False),
-                                       level_phase=True)
-
-        return np.array([f0, spectrum_abs, spectrum_phase])
-
     ################################
     #- Frequency calibration methods
     ################################
@@ -615,91 +497,8 @@ class SpectralProcessor(object):
 
         return np.mean(np.abs(d1) ** (1 / 2))  # minimize first derivative
 
-    @classmethod
-    def align_and_envelope_spectra(cls, spectra, spectra_ref,
-                                   apply_envelope=True, envelope_width=1,
-                                   BB_phase=False,
-                                   valid_thresh=.01, window=np.blackman,
-                                   factor=1, optimize_BB=False,
-                                   verbose=True):
-
-        spectra = np.array(spectra)
-        spectra_ref = np.array(spectra_ref)
-
-        Nrows = 5
-        assert len(spectra) == len(spectra_ref), \
-            "Applying envelope requires same number of accumulations for both analyte and reference"
-
-        assert len(spectra) % Nrows == 0, 'Input spectra must come as stacked groups of %i row vectors' % Nrows
-        assert len(spectra_ref) % Nrows == 0, 'Input spectra must come as stacked groups of %i row vectors' % Nrows
-        Nspectra = np.max((len(spectra) // Nrows, 1))
-
-        # Establish some mutual frequency axis
-
-        all_fs = np.append([], [spectra[Nrows * i] for i in range(Nspectra)] \
-                           + [spectra_ref[Nrows * i] for i in range(Nspectra)])
-        Nf = len(all_fs) // (2 * Nspectra)
-        f0 = np.linspace(np.min(all_fs),
-                         np.max(all_fs),
-                         Nf)
-
-        # Collect all the spectra and the envelopes
-        ss = []
-        ss_interp_ref = []
-        env_params = []
-        for i in range(Nspectra):
-
-            ## Analyte spectrum components
-            f,sabs,sphase = spectra[Nrows * i:Nrows * i+3]
-
-            ## window if necessary
-            s = sabs * np.exp(1j * sphase)
-            if window: s = cls.windowed_spectrum(f,s,window=window)
-
-            # In case we have invalid entries (zeros), remove them
-            where_valid = np.isfinite(f) * (f > 0)
-            f = f[where_valid]
-            s = s[where_valid]
-            ss.append(interp1d(f, s, **interp_kwargs)(f0))
-
-            ## Reference spectrum components
-            f_ref,sabs_ref,sphase_ref = spectra_ref[Nrows * i:Nrows * i+3]
-
-            # window if necessary
-            s_ref = sabs_ref * np.exp(1j * sphase_ref)
-            if window: s_ref = cls.windowed_spectrum(f,s_ref,window=window)
-
-            # Discard phase if we don't want it
-            if not BB_phase:
-                s_ref = np.abs(s_ref)
-
-            # In case we have invalid entries (zeros), remove them
-            where_valid = np.isfinite(f_ref) * (f_ref > 0)
-            f_ref = f_ref[where_valid]
-            s_ref = s_ref[where_valid]
-            ss_interp_ref.append(interp1d(f_ref, s_ref, **interp_kwargs))
-
-            env_params.append(spectra_ref[Nrows * i + 4][:3])
-
-        # Optimize calibration between BB and sample, if called for
-        args = (f0, ss, ss_interp_ref, env_params, apply_envelope, envelope_width, valid_thresh)
-        if optimize_BB:
-            result = minimize(cls.calibration_to_minimize, (factor,), method='Nelder-Mead', args=args)
-            factor = result.x[0]
-            if verbose: print('Identified calibration factor:',factor)
-
-        spectra_cal, spectra_BB_cal = cls.apply_frequency_calibration(factor, *args[:-1])
-
-        # Sort by center frequency
-        fcenters = [env_set[1] for env_set in env_params]
-        ordering = np.argsort(fcenters)
-        spectra_cal = [spectra_cal[idx] for idx in ordering]
-        spectra_BB_cal = [spectra_BB_cal[idx] for idx in ordering]
-
-        return f0, spectra_cal, spectra_BB_cal
-
     ##################################
-    # - Phase alignment static methods
+    # - Phase alignment methods
     ##################################
     @staticmethod
     def phase_displace(f, s, p):
@@ -707,18 +506,26 @@ class SpectralProcessor(object):
         return np.exp(1j * f * p) * s
 
     @staticmethod
-    def level_phase(f, s, order=1, manual_offset=0):
+    def level_phase(f, s, order=1, manual_offset=0, return_leveler=False):
 
-        p = np.unwrap(np.angle(s))
+        assert np.all(np.isfinite(s))
+        leveler = 1
         if order:
-            m = np.polyfit(x=f, y=p, deg=order, w=np.abs(s)**2)
-            m[-1]=0 #no overall phase offsets
-            p -= np.polyval(m, f)
+            #Loop until we can flatten the phase no further
+            while True:
+                p = np.unwrap(np.angle( s*leveler ))
+                m = list(np.polyfit(x=f, y=p, deg=order, w=np.abs(s)**2))
+                m[-1]=0 #no overall phase offsets
+                pcorr = -np.polyval(m, f)
+                leveler *= np.exp(1j*pcorr) #Update leveler
+                if np.isclose(np.sum(m),0): break #If we can update no further, break
 
         if manual_offset:
-            p += manual_offset * f/np.mean(np.abs(f))
+            pcorr = manual_offset * f/np.mean(np.abs(f))
+            leveler *= np.exp(1j*pcorr)
 
-        return np.abs(s) * np.exp(1j * p)
+        if return_leveler: return leveler
+        else: return s*leveler
 
     @classmethod
     def get_phase(cls,f,s,
@@ -744,7 +551,7 @@ class SpectralProcessor(object):
                       level=True,order=2,
                       **kwargs):
         """Return the phases corresponding to `spectra`, shifting each by an
-        appropriate factor of `2*pi` so that they are quasi=contiguous.
+        appropriate factor of `2*pi` so that they are quasi-contiguous.
         Spectra are assumed to have monotonically increasing center frequencies.
 
         Set `threshold` to decide the noise threshold above which spectral phase is computed.
@@ -783,22 +590,168 @@ class SpectralProcessor(object):
 
         return phases
 
-    new_phase_alignment = True
+    @classmethod
+    def interpolate_spectrum(cls,s,f1,f2,order=1):
+        #Regular interpolation of a spectrum, but first removing overall phase slope, which can be smeared by interpolation
+
+        # Find overall phase slope
+        leveler = cls.level_phase(f1,s,order=order,manual_offset=0,return_leveler=True)
+
+        result = interp1d(x=f1,y=s*leveler, **interp_kwargs)(f2)
+
+        leveler = interp1d(x=f1,y=leveler,**interp_kwargs)(f2)
+
+        result /= leveler #re-impose overall phase slope
+
+        result[~np.isfinite(result)]=0
+
+        return result
+
+    @staticmethod
+    def summed_spectrum(spectra, abs=False):
+
+        if abs:
+            spectrum = np.sum([np.abs(s) for s in spectra], axis=0)
+        else:
+            spectrum = np.sum([s for s in spectra], axis=0)
+
+        spectrum[~np.isfinite(spectrum)] = 0
+
+        return spectrum
+
+    @classmethod
+    def normalize_spectrum(cls, f_s, spectra,
+                           f_r, spectra_ref,
+                           abs=False, abs_ref=True,
+                           valid_thresh=.01):
+
+        spectrum = cls.summed_spectrum(spectra, abs=abs)
+        spectrum_ref = cls.summed_spectrum(spectra_ref, abs=abs_ref)
+
+        f_mutual = np.unique(np.append(f_s,f_r)) #Join and sort the frequencies
+        from scipy.signal import decimate
+        f_mutual = decimate(f_mutual,q=2,n=1) #down-sample by a factor of 2
+        #spectrum = interp1d(x=f_s,y=spectrum,bounds_error=False,fill_value=0,kind='linear')(f_mutual)
+        #spectrum_ref = interp1d(x=f_r,y=spectrum_ref,bounds_error=False,fill_value=0,kind='linear')(f_mutual)
+        spectrum = cls.interpolate_spectrum(spectrum,f_s,f_mutual)
+        spectrum_ref = cls.interpolate_spectrum(spectrum_ref,f_r,f_mutual)
+
+        thresh = valid_thresh * np.abs(spectrum_ref[np.isfinite(spectrum_ref)]).max()
+        where_valid = np.abs(spectrum_ref) > thresh
+        snorm = (spectrum / spectrum_ref)[where_valid]
+        f_mutual = f_mutual[where_valid]
+
+        return f_mutual, snorm
+
+    @classmethod
+    def accumulate_spectra(cls, spectra,
+                           apply_envelope=True,
+                           expand_envelope=1):
+
+        spectra = np.array(spectra)
+
+        Nrows = 5
+
+        assert len(spectra) % Nrows == 0, 'Input spectra must come as stacked groups of %i row vectors' % Nrows
+        Nspectra = np.max((len(spectra) // Nrows, 1))
+
+        # Establish some mutual frequency axis
+
+        all_fs = np.append([], [spectra[Nrows * i] for i in range(Nspectra)])
+        Nf = len(all_fs) // (2 * Nspectra)
+        f0 = np.linspace(np.min(all_fs),
+                         np.max(all_fs),
+                         Nf)
+
+        # Collect all the spectra and the envelopes
+        ss = []
+        for i in range(Nspectra):
+
+            ## Analyte spectrum components
+            f = spectra[Nrows * i]
+            sabs = spectra[Nrows * i + 1]
+            sphase = spectra[Nrows * i + 2]
+            env_params = spectra[Nrows * i + 4][:3]
+
+            s = sabs * np.exp(1j * sphase)
+
+            # In case we have invalid entries (zeros), remove them
+            where_valid = np.isfinite(f) * (f > 0)
+            f = f[where_valid]
+            s = s[where_valid]
+
+            s = cls.interpolate_spectrum(s,f,f0)
+            if apply_envelope:
+                env = spectral_envelope(f0, *env_params,
+                                        expand_envelope=expand_envelope)
+                env /= env.max()
+                s *= env
+
+            ss.append(s)
+
+        spectrum_abs = cls.summed_spectrum(ss, abs=True)
+        spectrum_phase = cls.get_phase(f0,
+                                       cls.summed_spectrum(ss,abs=False),
+                                       level_phase=True)
+
+        return np.array([f0, spectrum_abs, spectrum_phase])
+
+    window_order=1
+
+    def windowed_spectrum(self,f,scomplex,window=np.blackman,window_order=None):
+
+        if window is True:
+            window = np.blackman
+
+        if window_order is None:
+            window_order = self.window_order
+
+        ## Turn it into ifft-consistent spectrum
+        faxis = np.append(-f[::-1], f) #We assume we have only positive frequencies, but need negative ones too
+        s = np.append(np.conj(scomplex[::-1]), scomplex)
+        s = num.Spectrum(AWA(s, axes=[faxis], axis_names=['X Frequency']))
+
+        ## Compute and window interferogram
+        intfg = s.get_inverse()
+        w = window(len(intfg))**window_order
+        # Do not permit variability of window due to uncertainty in peak intensity
+        """xs = intfg.axes[0]
+        xcenter = np.sum(intfg ** 2 * xs) / np.sum(intfg ** 2)
+        w = np.roll(w, np.argmin(xs - xcenter) - np.argmax(w), axis=0) # Roll window center to intfg maximum"""
+        intfgw = intfg * w
+
+        ## Convert back to spectrum
+        sout = num.Spectrum(intfgw, axis=0)
+        sout = sout.interpolate_axis(f, axis=0, **interp_kwargs)
+
+        # Do not let window change overall power
+        Pactual = np.sum(np.abs(sout)**2)
+        Pdesired = np.sum(np.abs(scomplex)**2)
+        sout *= np.sqrt( Pdesired/Pactual )
+
+        return np.array(sout,dtype=np.complex)
+
     coincidence_exponent=2
 
-    def phase_aligned_spectrum(cls, f, spectra, verbose=False,
+    def phase_aligned_spectrum(self, f, spectra, verbose=False,
                                coincidence_exponent=None):
 
-        if coincidence_exponent is None: coincidence_exponent=cls.coincidence_exponent
-        print(coincidence_exponent)
+        if coincidence_exponent is None: coincidence_exponent=self.coincidence_exponent
+        #self.s0s=[] #Debugging - check the operands for phase alignments
 
-        def aligned_spectrum(stot,s):
+        def aligned_spectrum(s0, s):
 
-            phase0 = cls.get_phase(f, stot, manual_offset=0,
+            #Determine and remove average phase of stot, since it could be wrapping like crazy
+            leveler = self.level_phase(f, s0, order=1, manual_offset=0, return_leveler=True)
+
+            # Debugging - check the leveling
+            #self.s0s.append(num.Spectrum(AWA(s0 * leveler, axes=[f], axis_names=['X Frequency']), axis=0))
+
+            phase0 = self.get_phase(f, s0 * leveler, manual_offset=0,
+                                    level_phase=False)
+            phase = self.get_phase(f, s * leveler, manual_offset=0,
                                    level_phase=False)
-            phase = cls.get_phase(f, s, manual_offset=0,
-                                  level_phase=False)
-            coincidence = (np.abs(stot) * np.abs(s)) ** coincidence_exponent
+            coincidence = (np.abs(s0) * np.abs(s)) ** coincidence_exponent
             norm = np.sum(coincidence)
 
             pdiff = np.sum((phase0 - phase) * coincidence) / norm
@@ -810,7 +763,7 @@ class SpectralProcessor(object):
             offset = pdiff_pis + phase_alignment * f
             phase += offset
 
-            spectrum_aligned = cls.phase_displace(f, s, phase_alignment)
+            spectrum_aligned = self.phase_displace(f, s, phase_alignment)
 
             return spectrum_aligned, phase_alignment
 
@@ -818,10 +771,10 @@ class SpectralProcessor(object):
         weights = [np.sum(np.abs(spectrum)**2)
                    for spectrum in spectra]
         ind0 = np.argmax(weights)
-        stot = spectra[ind0]
+        spectrum_aligned = spectra[ind0]
         if verbose: print('Primary index for phase alignment:',ind0)
 
-        cls.phase_alignments=[0]*len(spectra)
+        self.phase_alignments= [0] * len(spectra)
         spectra_aligned=[0]*len(spectra)
         spectra_aligned[ind0]=spectra[ind0]
         total_count=1
@@ -830,15 +783,98 @@ class SpectralProcessor(object):
         index_list = np.append( np.arange(ind0-1,-1,-1),
                                 np.arange(ind0+1,len(spectra),1) )
         for i in index_list:
-            spectrum_aligned, phase_alignment = aligned_spectrum(stot,spectra[i])
-            stot = stot+spectrum_aligned
+            spectrum_aligned, phase_alignment = aligned_spectrum(spectrum_aligned,
+                                                                 spectra[i])
             spectra_aligned[i] = spectrum_aligned
-            cls.phase_alignments[i] = phase_alignment
+            self.phase_alignments[i] = phase_alignment
             total_count+=1
 
         assert total_count==len(spectra)
 
         return spectra_aligned
+
+    #@TODO: remove the BB-optimization
+    def align_and_envelope_spectra(self, spectra, spectra_ref,
+                                   apply_envelope=True, envelope_width=1,
+                                   BB_phase=False,
+                                   valid_thresh=.01, window=np.blackman,
+                                   factor=1, optimize_BB=False,
+                                   verbose=True):
+
+        spectra = np.array(spectra)
+        spectra_ref = np.array(spectra_ref)
+
+        Nrows = 5
+        assert len(spectra) == len(spectra_ref), \
+            "Applying envelope requires same number of accumulations for both analyte and reference"
+
+        assert len(spectra) % Nrows == 0, 'Input spectra must come as stacked groups of %i row vectors' % Nrows
+        assert len(spectra_ref) % Nrows == 0, 'Input spectra must come as stacked groups of %i row vectors' % Nrows
+        Nspectra = np.max((len(spectra) // Nrows, 1))
+
+        # Establish some mutual frequency axis
+
+        all_fs = np.append([], [spectra[Nrows * i] for i in range(Nspectra)] \
+                           + [spectra_ref[Nrows * i] for i in range(Nspectra)])
+        Nf = len(all_fs) // (2 * Nspectra)
+        f0 = np.linspace(np.min(all_fs),
+                         np.max(all_fs),
+                         Nf)
+
+        # Collect all the spectra and the envelopes
+        ss = []
+        ss_interp_ref = []
+        env_params = []
+        for i in range(Nspectra):
+
+            ## Analyte spectrum components
+            f,sabs,sphase = spectra[Nrows * i:Nrows * i+3]
+
+            ## window if necessary
+            s = sabs * np.exp(1j * sphase)
+            if window: s = self.windowed_spectrum(f, s, window=window)
+
+            # In case we have invalid entries (zeros), remove them
+            where_valid = np.isfinite(f) * (f > 0)
+            f = f[where_valid]
+            s = s[where_valid]
+            ss.append(self.interpolate_spectrum(s,f,f0))
+
+            ## Reference spectrum components
+            f_ref,sabs_ref,sphase_ref = spectra_ref[Nrows * i:Nrows * i+3]
+
+            # window if necessary
+            s_ref = sabs_ref * np.exp(1j * sphase_ref)
+            if window: s_ref = self.windowed_spectrum(f, s_ref, window=window)
+
+            # Discard phase if we don't want it
+            if not BB_phase:
+                s_ref = np.abs(s_ref)
+
+            # In case we have invalid entries (zeros), remove them
+            where_valid = np.isfinite(f_ref) * (f_ref > 0)
+            f_ref = f_ref[where_valid]
+            s_ref = s_ref[where_valid]
+            ss_interp_ref.append(interp1d(f_ref, s_ref, **interp_kwargs))
+
+            env_params.append(spectra_ref[Nrows * i + 4][:3])
+
+        # Optimize calibration between BB and sample, if called for
+        args = (f0, ss, ss_interp_ref, env_params, apply_envelope, envelope_width, valid_thresh)
+        if optimize_BB:
+            result = minimize(self.calibration_to_minimize, (factor,), method='Nelder-Mead', args=args)
+            factor = result.x[0]
+            if verbose: print('Identified calibration factor:',factor)
+
+        spectra_cal, spectra_BB_cal = self.apply_frequency_calibration(factor, *args[:-1])
+
+        # Sort by center frequency
+        fcenters = [env_set[1] for env_set in env_params]
+        ordering = np.argsort(fcenters)
+        spectra_cal = [spectra_cal[idx] for idx in ordering]
+        spectra_BB_cal = [spectra_BB_cal[idx] for idx in ordering]
+
+        return f0, spectra_cal, spectra_BB_cal
 
     ###########
     #- User API
@@ -885,14 +921,15 @@ class SpectralProcessor(object):
         s = AWA(s,axes=[f],axis_names=['X Frequency'])
         return num.Spectrum(s,axis=0)
 
-    def process_spectrum(self,target='sample',
-                        apply_envelope=True,
-                        envelope_width=1,
-                        valid_thresh=.01,
-                        window=np.blackman,
-                        optimize_BB=False,
-                        optimize_phase=True,
-                        view_phase_alignment=False,
+    def process_spectrum(self, target='sample',
+                         apply_envelope=True,
+                         envelope_width=1,
+                         valid_thresh=.01,
+                         window=np.blackman,
+                         optimize_BB=False,
+                         align_phase=True,
+                         BB_normalize=True,
+                         view_phase_alignment=False,
                          view_phase_alignment_leveling=6):
         """This normalizes sample or reference spectra (based on `target`)
         to their respective bright beam spectra, while enveloping,
@@ -914,12 +951,18 @@ class SpectralProcessor(object):
                                                                   optimize_BB=optimize_BB,
                                                                   valid_thresh=valid_thresh)
 
+        # Apply correction factor (as from detector calibration) if provided
+        if hasattr(self,'%s_factors'%target):
+            print('ya')
+            factors=getattr(self,'%s_factors'%target)
+            for s,factor in zip(spectra,factors): s *= factor
+
         self.f0 = f0
         self.processed_spectra = spectra
         self.processed_spectra_BB = spectra_BB
 
         # Align phase only if commanded, store uncorrected version as `spectra0` for comparison
-        if optimize_phase:
+        if align_phase:
             print('Aligning phase...')
             phase_alignment_method = self.phase_aligned_spectrum
             spectra0 = spectra
@@ -969,30 +1012,36 @@ class SpectralProcessor(object):
                 #plt.subplots_adjust(hspace=.3)
                 plt.tight_layout()
 
-        f, spectrum_abs = self.normalize_spectrum(f0, spectra,
-                                              f0, spectra_BB,
-                                              valid_thresh=valid_thresh,
-                                              abs=True,
-                                              abs_ref=True) #discard phase of BB
+        if BB_normalize:
+            f, spectrum_abs = self.normalize_spectrum(f0, spectra,
+                                                  f0, spectra_BB,
+                                                  valid_thresh=valid_thresh,
+                                                  abs=True,
+                                                  abs_ref=True) #discard phase of BB
 
-        f, spectrum = self.normalize_spectrum(f0, spectra,
-                                              f0, spectra_BB,
-                                              valid_thresh=valid_thresh,
-                                              abs=False,
-                                              abs_ref=True) #discard phase of BB
+            f, spectrum = self.normalize_spectrum(f0, spectra,
+                                                  f0, spectra_BB,
+                                                  valid_thresh=valid_thresh,
+                                                  abs=False,
+                                                  abs_ref=True) #discard phase of BB
+        else:
+            spectrum_abs = self.summed_spectrum(spectra, abs=True)
+            spectrum = self.summed_spectrum(spectra, abs=False)
+            f=f0
 
         return f,spectrum_abs,spectrum
 
     def __call__(self,
                  optimize_BB=False,
-                 optimize_phase=True,
+                 align_phase=True,
                  apply_envelope=True,
                  envelope_width=1,
                  smoothing=None,
                  valid_thresh=.01,
                  window=np.blackman,
                  view_phase_alignment=False,
-                 abs_only=False):
+                 BB_normalize=True,
+                 **kwargs):
         """This normalizes sample and reference spectra to their
         respective bright-beam spectra, and then normalizes these
         two BB-normalized spectra to each other."""
@@ -1000,24 +1049,28 @@ class SpectralProcessor(object):
         print('Processing sample spectra...')
         self.f_sample,self.sample_spectrum_abs,self.sample_spectrum\
                                             =self.process_spectrum(target='sample',
-                                                                optimize_BB=optimize_BB,
-                                                                 apply_envelope=apply_envelope,
-                                                                envelope_width=envelope_width,
-                                                                valid_thresh=valid_thresh,
-                                                                window=window,
-                                                                optimize_phase=optimize_phase,
-                                                                view_phase_alignment=view_phase_alignment)
+                                                                   optimize_BB=optimize_BB,
+                                                                   apply_envelope=apply_envelope,
+                                                                   envelope_width=envelope_width,
+                                                                   valid_thresh=valid_thresh,
+                                                                   window=window,
+                                                                   align_phase=align_phase,
+                                                                   view_phase_alignment=view_phase_alignment,
+                                                                   BB_normalize=BB_normalize,
+                                                                   **kwargs)
 
         print('Processing reference spectra...')
         self.f_ref,self.ref_spectrum_abs,self.ref_spectrum\
                                         = self.process_spectrum(target='reference',
                                                                 optimize_BB=optimize_BB,
-                                                                 apply_envelope=apply_envelope,
+                                                                apply_envelope=apply_envelope,
                                                                 envelope_width=envelope_width,
                                                                 valid_thresh=valid_thresh,
                                                                 window=window,
-                                                                optimize_phase=optimize_phase,
-                                                                view_phase_alignment=view_phase_alignment)
+                                                                align_phase=align_phase,
+                                                                view_phase_alignment=view_phase_alignment,
+                                                                   BB_normalize=BB_normalize,
+                                                                **kwargs)
 
         self.f_norm_abs, self.norm_spectrum_abs = self.normalize_spectrum(self.f_sample, [self.sample_spectrum_abs],
                                                                             self.f_ref, [self.ref_spectrum_abs],
@@ -1028,9 +1081,8 @@ class SpectralProcessor(object):
                                                                   abs=False, abs_ref=False,
                                                                   valid_thresh=valid_thresh)
 
-        self.norm_spectrum_abs = interp1d(x=self.f_norm_abs,
-                                   y=self.norm_spectrum_abs,
-                                   **interp_kwargs)(self.f_norm)
+        self.norm_spectrum_abs = self.interpolate_spectrum(self.norm_spectrum_abs,
+                                                           self.f_norm_abs,self.f_norm)
 
         if smoothing:
             self.norm_spectrum_abs = numrec.smooth(self.norm_spectrum_abs,
@@ -1068,11 +1120,11 @@ def BB_referenced_spectrum(spectra,spectra_BB,
 
         f, spectrum_abs, spectrum =\
                         SP.process_spectrum(target='sample',
-                                           apply_envelope=apply_envelope,
+                                            apply_envelope=apply_envelope,
                                             envelope_width=envelope_width,
                                             valid_thresh=valid_thresh,
                                             optimize_BB=optimize_BB,
-                                            optimize_phase=optimize_phase,
+                                            align_phase=optimize_phase,
                                             view_phase_alignment=False)
         return np.array([f,
                          spectrum_abs,
@@ -1086,11 +1138,11 @@ def BB_referenced_spectrum(spectra,spectra_BB,
         raise
 
 def normalized_spectrum(sample_spectra, sample_BB_spectra,
-                       ref_spectra, ref_BB_spectra,
-                       apply_envelope=True, envelope_width=1,
-                       window=False, optimize_phase=True,
-                       phase_offset=0,
-                        smoothing=None,valid_thresh=.01,
+                        ref_spectra, ref_BB_spectra,
+                        apply_envelope=True, envelope_width=1,
+                        window=False, align_phase=True,
+                        phase_offset=0,
+                        smoothing=None, valid_thresh=.01,
                         piecewise_flattening=0):
 
     SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
@@ -1098,11 +1150,11 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
 
     f, snorm_abs,snorm = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
                             smoothing=smoothing,
-                          valid_thresh=valid_thresh,
+                            valid_thresh=valid_thresh,
                             window=window,
-                          optimize_BB=False,
-                          optimize_phase=optimize_phase,
-                          view_phase_alignment=False)
+                            optimize_BB=False,
+                            align_phase=align_phase,
+                            view_phase_alignment=False)
 
     if piecewise_flattening:
         phase = SP.get_phase(f, snorm, level_phase=False)
