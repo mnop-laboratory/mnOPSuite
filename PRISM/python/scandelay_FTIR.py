@@ -370,13 +370,13 @@ def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=3000):
     v *= w
     v = AWA(v, axes=[d])
     s = num.Spectrum(v, axis=0)
+    f = s.axes[0]
 
     # This phase is a problem for subsequent inverse FFT, since intended origin is unknown
-    # Instead, assume spectra whose phases are to be compared were acquired with the exact same x-axes
-    f = s.axes[0]
-    """# This applies knowledge that d does not start at zero, but min value is meaningful
-    pcorr = 2 * np.pi * (np.min(d)) * f
-    s *= np.exp(-1j * pcorr) #Since we are in a `exp(-1j*..)` basis"""
+    # This assumes center burst is indeed in center, and discards useless phase information arising from distance from center
+    # (re-defines x=0 to be center)
+    #pcorr = 2 * np.pi * (np.mean(d)-np.min(d)) * f
+    #s *= np.exp(+1j * pcorr) #plane waves are in a basis `exp(-1j*x...)`, so we are shifting by `-x0`
 
     posf=(f>0)
     if fmax is not None: posf*=(f<fmax)
@@ -506,11 +506,31 @@ class SpectralProcessor(object):
         return np.exp(1j * f * p) * s
 
     @staticmethod
-    def level_phase(f, s, order=1, manual_offset=0, return_leveler=False):
+    def get_intfg(f,scomplex):
+
+        faxis = np.append(-f[::-1], f) #We assume we have only positive frequencies, but need negative ones too
+        s = np.append(np.conj(scomplex[::-1]), scomplex)
+        s = num.Spectrum(AWA(s, axes=[faxis], axis_names=['X Frequency']))
+
+        ## Compute and window interferogram
+        intfg = s.get_inverse().real
+        x=intfg.axes[0]
+        intfg = np.array(intfg)
+
+        return x,intfg
+
+    @classmethod
+    def level_phase(cls,f, s, order=1, manual_offset=0, return_leveler=False):
 
         assert np.all(np.isfinite(s))
+
         leveler = 1
         if order:
+            #Begin by de-shifting interferogram
+            x,intfg = cls.get_intfg(f,s)
+            x0 = np.sum(x*intfg**2)/np.sum(intfg**2)
+            leveler *= np.exp(2*np.pi*1j*f*x0) #plane waves are in a basis `exp(-1j*x...)`, so we are shifting by `-x0`
+
             #Loop until we can flatten the phase no further
             while True:
                 p = np.unwrap(np.angle( s*leveler ))
@@ -657,12 +677,8 @@ class SpectralProcessor(object):
         Nspectra = np.max((len(spectra) // Nrows, 1))
 
         # Establish some mutual frequency axis
-
-        all_fs = np.append([], [spectra[Nrows * i] for i in range(Nspectra)])
-        Nf = len(all_fs) // (2 * Nspectra)
-        f0 = np.linspace(np.min(all_fs),
-                         np.max(all_fs),
-                         Nf)
+        all_fs = np.array([spectra[Nrows * i] for i in range(Nspectra)])
+        f0 = spectra[0] #all_fs[0] #np.unique(all_fs.flatten())
 
         # Collect all the spectra and the envelopes
         ss = []
@@ -695,7 +711,7 @@ class SpectralProcessor(object):
                                        cls.summed_spectrum(ss,abs=False),
                                        level_phase=True)
 
-        return np.array([f0, spectrum_abs, spectrum_phase])
+        return np.array([f0, spectrum_abs, spectrum_phase],dtype=np.float)
 
     window_order=1
 
@@ -707,13 +723,8 @@ class SpectralProcessor(object):
         if window_order is None:
             window_order = self.window_order
 
-        ## Turn it into ifft-consistent spectrum
-        faxis = np.append(-f[::-1], f) #We assume we have only positive frequencies, but need negative ones too
-        s = np.append(np.conj(scomplex[::-1]), scomplex)
-        s = num.Spectrum(AWA(s, axes=[faxis], axis_names=['X Frequency']))
+        x,intfg = self.get_intfg(f,scomplex)
 
-        ## Compute and window interferogram
-        intfg = s.get_inverse()
         w = window(len(intfg))**window_order
         # Do not permit variability of window due to uncertainty in peak intensity
         """xs = intfg.axes[0]
@@ -722,7 +733,7 @@ class SpectralProcessor(object):
         intfgw = intfg * w
 
         ## Convert back to spectrum
-        sout = num.Spectrum(intfgw, axis=0)
+        sout = num.Spectrum(AWA(intfgw,axes=[x]), axis=0)
         sout = sout.interpolate_axis(f, axis=0, **interp_kwargs)
 
         # Do not let window change overall power
@@ -761,8 +772,6 @@ class SpectralProcessor(object):
             # Decide how much of phase difference allocates to `2*pi` modulus and how much to physical shift
             pdiff_pis = np.round(pdiff / (2 * np.pi)) * 2 * np.pi
             phase_alignment = (pdiff - pdiff_pis) / f0
-            offset = pdiff_pis + phase_alignment * f
-            phase += offset
 
             spectrum_aligned = self.phase_displace(f, s, phase_alignment)
 
@@ -772,23 +781,26 @@ class SpectralProcessor(object):
         weights = [np.sum(np.abs(spectrum)**2)
                    for spectrum in spectra]
         ind0 = np.argmax(weights)
-        spectrum_aligned = spectra[ind0]
         if verbose: print('Primary index for phase alignment:',ind0)
 
         self.phase_alignments= [0] * len(spectra)
         spectra_aligned=[0]*len(spectra)
-        spectra_aligned[ind0]=spectra[ind0]
+        spectra_aligned[ind0] = spectrum_cmp = spectra[ind0]
         total_count=1
 
         #Count backward, then forward
         index_list = np.append( np.arange(ind0-1,-1,-1),
                                 np.arange(ind0+1,len(spectra),1) )
         for i in index_list:
-            spectrum_aligned, phase_alignment = aligned_spectrum(spectrum_aligned,
+            spectrum_aligned, phase_alignment = aligned_spectrum(spectrum_cmp,
                                                                  spectra[i])
             spectra_aligned[i] = spectrum_aligned
             self.phase_alignments[i] = phase_alignment
             total_count+=1
+
+            #When we hit the first, re-set our reference spectrum
+            if i==0: spectrum_cmp=spectra[ind0]
+            else: spectrum_cmp = spectrum_aligned
 
         assert total_count==len(spectra)
 
@@ -814,13 +826,9 @@ class SpectralProcessor(object):
         Nspectra = np.max((len(spectra) // Nrows, 1))
 
         # Establish some mutual frequency axis
-
-        all_fs = np.append([], [spectra[Nrows * i] for i in range(Nspectra)] \
-                           + [spectra_ref[Nrows * i] for i in range(Nspectra)])
-        Nf = len(all_fs) // (2 * Nspectra)
-        f0 = np.linspace(np.min(all_fs),
-                         np.max(all_fs),
-                         Nf)
+        all_fs = np.array([spectra[Nrows * i] for i in range(Nspectra)]+
+                           [spectra_ref[Nrows * i] for i in range(Nspectra)])
+        f0 = spectra[0] #all_fs[0]#np.unique(all_fs.flatten())
 
         # Collect all the spectra and the envelopes
         ss = []
@@ -1107,7 +1115,7 @@ def accumulate_spectra(spectra, apply_envelope=True, expand_envelope=1):
         with open(error_file,'w') as f:
             f.write(error_text)
 
-        return False
+        raise
 
 def BB_referenced_spectrum(spectra,spectra_BB,
                           apply_envelope=True, envelope_width=1,
