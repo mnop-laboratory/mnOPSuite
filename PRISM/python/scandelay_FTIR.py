@@ -110,9 +110,200 @@ def get_best_delay():
     if best_delay is None: return 0
     return best_delay
 
+def model_xs(indices,params):
+
+    offset,period=params[:2]
+    xs = offset
+    amps_phases=params[2:]
+
+    N=(len(amps_phases))//2 #harmonics to include
+    for i in range(N):
+        n=i+1
+        amp,phase=amps_phases[2*i:2*(i+1)]
+        xs += amp*np.cos(2*np.pi*n*indices/period+phase)
+
+    return xs
+
+xaxis=None
+
+def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
+                         shift0=None,optimize_shift=True,shift_range=15,
+                         flattening_order=5,noise=0,
+                         fit_xs=True, fit_xs_order=4,smooth_xs = 100):
+
+    global dX,best_delay,xaxis
+    global intfg_mutual_fwd,intfg_mutual_bwd
+    if best_delay is None: best_delay=shift0
+
+    intfgs_arr = np.array(intfgs_arr)
+    Ncycles = len(intfgs_arr) // 2
+
+    # --- Process data
+    all_xs = []
+    all_ys = []
+    for i in range(Ncycles):
+        # i=i+10
+        ys, xs = intfgs_arr[2 * i:2 * (i + 1)]
+        all_ys.append(ys)
+        all_xs.append(xs)
+
+    all_xs = np.mean(np.array(all_xs),axis=0)
+    all_xs *= delay_calibration_factor
+
+    if fit_xs:
+        Nsamples = len(all_xs)
+        indices = np.arange(Nsamples)
+        offset = np.mean(all_xs)
+        period = float(Nsamples)
+        amps = [0] * fit_xs_order
+        amps[0] = np.ptp(all_xs) / 2
+        phases = [0] * fit_xs_order
+        params0 = [offset, period]
+        for amp, phase in zip(amps, phases): params0 = params0 + [amp, phase]
+        params, _ = numrec.ParameterFit(indices, all_xs, model_xs, params0)
+        if i - Ncycles == -1: print(params[2:])
+        all_xs = model_xs(indices, params)
+
+    all_ys = np.mean(np.array(all_ys),axis=0)
+    all_ys = all_ys - np.polyval(np.polyfit(x=all_xs, y=all_ys, deg=flattening_order), all_xs)
+
+    # --- Get fwd/bwd interferograms
+    idx_turn = np.argmax(all_xs)
+    all_xs_fwd = all_xs[idx_turn:]
+    all_ys_fwd = all_ys[idx_turn:]
+    all_xs_bwd = all_xs[:idx_turn]
+    all_ys_bwd = all_ys[:idx_turn]
+
+    #--- Determine and update the global x-range, if needed
+    x1 = np.min(all_xs)
+    x2 = np.max(all_xs)
+    Nbins = len(all_xs)
+    if xaxis is None:
+        print('Re-using pre-existing x-axis for interferograms...')
+        xaxis = np.linspace(x1, x2, Nbins)
+
+    #--- If we don't need to optimize, return what we need
+    def shifted_intfg(shift):
+
+        all_xs_rolled = np.roll(all_xs, shift, axis=0)
+        result = binned_statistic(all_xs_rolled, all_ys, bins=Nbins)
+        xnew = result.bin_edges[:-1]
+        intfg_new = result.statistic
+
+        keep = np.isfinite(intfg_new)
+        intfg_new = intfg_new[keep]
+        xnew = xnew[keep]
+
+        return xnew, intfg_new
+
+    if not optimize_shift:
+        best_delay = shift0
+        x, intfg = shifted_intfg(shift0)
+
+        intfg_interp = interp1d(x=x, y=intfg,
+                                **interp_kwargs)
+        intfg_new = intfg_interp(xaxis)
+
+        return np.array([intfg_new, xaxis])
+
+    #--- Get fwd / bwd interferograms and their mutual overlap
+    result = binned_statistic(all_xs_fwd.flatten(),
+                              all_ys_fwd.flatten(),
+                              bins=Nbins)
+    x_fwd = result.bin_edges[:-1]
+    intfg_fwd = result.statistic
+    where_keep=np.isfinite(intfg_fwd)
+    intfg_fwd=intfg_fwd[where_keep]
+    x_fwd = x_fwd[where_keep]
+    intfg_fwd = AWA(intfg_fwd, axes=[x_fwd])
+
+    result = binned_statistic(all_xs_bwd.flatten(),
+                              all_ys_bwd.flatten(),
+                              bins=Nbins)
+    x_bwd = result.bin_edges[:-1]
+    intfg_bwd = result.statistic
+    where_keep=np.isfinite(intfg_bwd)
+    intfg_bwd=intfg_bwd[where_keep]
+    x_bwd = x_bwd[where_keep]
+    intfg_bwd = AWA(intfg_bwd, axes=[x_bwd])
+
+    xmin = np.max((np.min(x_fwd), np.min(x_bwd)))
+    xmax = np.min((np.max(x_fwd), np.max(x_bwd)))
+    xmutual = np.linspace(xmin, xmax, Nbins)
+    intfg_mutual_fwd = intfg_fwd.interpolate_axis(xmutual, axis=0,**interp_kwargs)
+    intfg_mutual_bwd = intfg_bwd.interpolate_axis(xmutual, axis=0,**interp_kwargs)
+
+    #--- Define some helper functions for identifying x-coordinate of interferograms
+    def get_dx(intfg_mutual_fwd, intfg_mutual_bwd, exp=4):
+
+        sf = num.Spectrum(intfg_mutual_fwd-np.mean(intfg_mutual_fwd), axis=0)
+        sb = num.Spectrum(intfg_mutual_bwd-np.mean(intfg_mutual_bwd), axis=0)
+        spow = np.abs(sf) ** exp + np.abs(sb) ** exp
+        keep = (spow >= spow.max() / 10) * (sf.axes[0] > 0)
+        norm = sf / sb
+        norm = numrec.smooth(norm, window_len=5, axis=0)
+        norm = norm[keep]
+        spow = spow[keep]
+        f, p = norm.axes[0], np.unwrap(np.angle(norm))
+
+        p = np.polyfit(x=f, y=p, w=spow, deg=1)
+        dx = -p[0] / (2 * np.pi)
+
+        return dx
+
+    def get_x0(intfg_mutual_fwd, intfg_mutual_bwd, exp=2):
+
+        global intfg_fwd_fil, intfg_bwd_fil
+        x = intfg_mutual_fwd.axes[0]
+
+        intfg_fwd = intfg_mutual_fwd
+        intfg_bwd = intfg_mutual_bwd
+        w = np.abs(intfg_fwd) ** exp + np.abs(intfg_bwd) ** exp
+
+        x0 = np.sum(x * w) / np.sum(w)
+
+        return x0
+
+    #--- Find average characteristic index of x0_fwd vs x0_bwd = shift0
+    if shift0 is None:
+        x0 = get_x0(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
+        print('x0:', x0)
+        dx = get_dx(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
+        print('Fwd/bwd dx separation:', dx)
+        x0_fwd = x0 + dx / 2
+        x0_bwd = x0 - dx / 2
+
+        dns = []
+        for xs_fwd in all_xs_fwd:
+            n2 = np.argmin(np.abs(xs_fwd - x0_fwd))
+            n1 = np.argmin(np.abs(xs_fwd - x0_bwd))
+            dns.append((n2 - n1) / 2.)
+
+        shift0 = np.int(np.round(np.mean(dns)))
+        print('Initially optimal shift:', shift0)
+
+    # -- Optimize around shift0
+    shifts = np.arange(-shift_range, shift_range, 1) + shift0
+    sums = []
+    for shift in shifts:
+        x, intfg = shifted_intfg(shift)
+        sums.append(np.sum(intfg ** 2))
+    shift0 = shifts[np.argmax(sums)]
+
+    print('Finally optimal shift:', shift0)
+    best_delay = shift0
+    x, intfg = shifted_intfg(shift0)
+
+    intfg_interp = interp1d(x=x,y=intfg,
+                            **interp_kwargs)
+    intfg_new = intfg_interp(xaxis)
+
+    return np.array([intfg_new,xaxis])
+
 def align_interferograms_base(intfgs_arr, delay_calibration_factor=1,
-                         shift0=0,optimize_shift=True,shift_range=15,
-                         flattening_order=20,noise=0):
+                         shift0=None,optimize_shift=True,shift_range=15,
+                         flattening_order=5,noise=0,
+                         fit_xs=True, fit_xs_order=4,smooth_xs = 100):
 
     global dX,best_delay,Nbins
     global intfg_mutual_fwd,intfg_mutual_bwd
@@ -121,7 +312,8 @@ def align_interferograms_base(intfgs_arr, delay_calibration_factor=1,
     intfgs_arr = np.array(intfgs_arr)
     Ncycles = len(intfgs_arr) // 2
     Nsamples = intfgs_arr.shape[1]
-    x_smoothing = np.max((Nsamples / 200, 100))
+
+    indices = np.arange(Nsamples)
 
     # --- Process data
     all_xs_fwd = []
@@ -134,7 +326,19 @@ def align_interferograms_base(intfgs_arr, delay_calibration_factor=1,
         # i=i+10
         ys, xs = intfgs_arr[2 * i:2 * (i + 1)]
 
-        xs = numrec.smooth(xs, window_len=x_smoothing, axis=0)
+        if fit_xs:
+            offset = np.mean(xs); period = float(Nsamples)
+            amps = [0]*fit_xs_order; amps[0]=np.ptp(xs)/2
+            phases=[0]*fit_xs_order
+            params0 = [offset,period]
+            for amp,phase in zip(amps,phases): params0 = params0+[amp,phase]
+            params,_ = numrec.ParameterFit(indices,xs,model_xs,params0)
+            if i-Ncycles==-1: print(params[2:])
+            xs = model_xs(indices,params)
+
+        elif smooth_xs:
+            xs = numrec.smooth(xs, window_len=smooth_xs, axis=0)
+
         if i == 0:
             idx_turn = np.argmax(xs)
 
@@ -220,8 +424,8 @@ def align_interferograms_base(intfgs_arr, delay_calibration_factor=1,
     xmin = np.max((np.min(x_fwd), np.min(x_bwd)))
     xmax = np.min((np.max(x_fwd), np.max(x_bwd)))
     xmutual = np.linspace(xmin, xmax, Nbins)
-    intfg_mutual_fwd = intfg_fwd.interpolate_axis(xmutual, axis=0)
-    intfg_mutual_bwd = intfg_bwd.interpolate_axis(xmutual, axis=0)
+    intfg_mutual_fwd = intfg_fwd.interpolate_axis(xmutual, axis=0,**interp_kwargs)
+    intfg_mutual_bwd = intfg_bwd.interpolate_axis(xmutual, axis=0,**interp_kwargs)
 
     #--- Define some helper functions for identifying x-coordinate of interferograms
     def get_dx(intfg_mutual_fwd, intfg_mutual_bwd, exp=4):
@@ -255,27 +459,27 @@ def align_interferograms_base(intfgs_arr, delay_calibration_factor=1,
         return x0
 
     #--- Find average characteristic index of x0_fwd vs x0_bwd = shift0
-    x0 = get_x0(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
-    print('x0:', x0)
-    dx = get_dx(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
-    print('Fwd/bwd dx separation:', dx)
-    x0_fwd = x0 + dx / 2
-    x0_bwd = x0 - dx / 2
+    if shift0 is None:
+        x0 = get_x0(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
+        print('x0:', x0)
+        dx = get_dx(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
+        print('Fwd/bwd dx separation:', dx)
+        x0_fwd = x0 + dx / 2
+        x0_bwd = x0 - dx / 2
 
-    dns = []
-    for xs_fwd in all_xs_fwd:
-        n2 = np.argmin(np.abs(xs_fwd - x0_fwd))
-        n1 = np.argmin(np.abs(xs_fwd - x0_bwd))
-        dns.append((n2 - n1) / 2.)
+        dns = []
+        for xs_fwd in all_xs_fwd:
+            n2 = np.argmin(np.abs(xs_fwd - x0_fwd))
+            n1 = np.argmin(np.abs(xs_fwd - x0_bwd))
+            dns.append((n2 - n1) / 2.)
 
-    shift0 = np.int(np.round(np.mean(dns)))
-    print('Initially optimal shift:', shift0)
+        shift0 = np.int(np.round(np.mean(dns)))
+        print('Initially optimal shift:', shift0)
 
     # -- Optimize around shift0
     shifts = np.arange(-shift_range, shift_range, 1) + shift0
     sums = []
     for shift in shifts:
-        print(shift)
         x, intfg = shifted_intfg(shift)
         sums.append(np.sum(intfg ** 2))
     shift0 = shifts[np.argmax(sums)]
@@ -297,7 +501,7 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
                          flattening_order=20,noise=0):
 
     try:
-        result = align_interferograms_base(intfgs_arr, delay_calibration_factor=delay_calibration_factor,
+        result = align_interferograms_test(intfgs_arr, delay_calibration_factor=delay_calibration_factor,
                                            shift0=shift0,optimize_shift=optimize_shift,shift_range=shift_range,
                                            flattening_order=flattening_order,noise=noise)
         return result
@@ -372,10 +576,10 @@ def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=3000):
     s = num.Spectrum(v, axis=0)
     f = s.axes[0]
 
-    # This phase is a problem for subsequent inverse FFT, since intended origin is unknown
-    # This assumes center burst is indeed in center, and discards useless phase information arising from distance from center
-    # (re-defines x=0 to be center)
-    #pcorr = 2 * np.pi * (np.mean(d)-np.min(d)) * f
+    # Just discard the information about absolute coordinates;
+    # assume spectra will only be compared when they share the same x-axis
+    # The starting coordinate in x is physically meaninful
+    #pcorr = 2 * np.pi * (np.min(d)) * f
     #s *= np.exp(+1j * pcorr) #plane waves are in a basis `exp(-1j*x...)`, so we are shifting by `-x0`
 
     posf=(f>0)
@@ -535,10 +739,10 @@ class SpectralProcessor(object):
             while True:
                 p = np.unwrap(np.angle( s*leveler ))
                 m = list(np.polyfit(x=f, y=p, deg=order, w=np.abs(s)**2))
-                m[-1]=0 #no overall phase offsets
+                if order == 1:  m[-1]=0 #no overall phase offsets, if we are restricting to physical offsets
                 pcorr = -np.polyval(m, f)
                 leveler *= np.exp(1j*pcorr) #Update leveler
-                if np.isclose(np.sum(m),0): break #If we can update no further, break
+                if np.isclose(np.sum(m[:-1]),0): break #If we can update non-constant offsets no further, break
 
         if manual_offset:
             pcorr = manual_offset * f/np.mean(np.abs(f))
@@ -715,21 +919,22 @@ class SpectralProcessor(object):
 
     window_order=1
 
-    def windowed_spectrum(self,f,scomplex,window=np.blackman,window_order=None):
+    @classmethod
+    def windowed_spectrum(cls,f,scomplex,window=np.blackman,window_order=None):
 
         if window is True:
             window = np.blackman
 
         if window_order is None:
-            window_order = self.window_order
+            window_order = cls.window_order
 
-        x,intfg = self.get_intfg(f,scomplex)
+        x,intfg = cls.get_intfg(f,scomplex)
 
         w = window(len(intfg))**window_order
         # Do not permit variability of window due to uncertainty in peak intensity
-        """xs = intfg.axes[0]
-        xcenter = np.sum(intfg ** 2 * xs) / np.sum(intfg ** 2)
-        w = np.roll(w, np.argmin(xs - xcenter) - np.argmax(w), axis=0) # Roll window center to intfg maximum"""
+        xcenter = np.sum(intfg ** 2 * x) / np.sum(intfg ** 2)
+        w = np.roll(w, np.argmin(x - xcenter) - np.argmax(w), axis=0) # Roll window center to intfg maximum"""
+        w=1
         intfgw = intfg * w
 
         ## Convert back to spectrum
@@ -742,6 +947,17 @@ class SpectralProcessor(object):
         sout *= np.sqrt( Pdesired/Pactual )
 
         return np.array(sout,dtype=np.complex)
+
+    @classmethod
+    def smoothed_spectrum(cls,f,scomplex,smoothing=4,order=2):
+
+        leveler = cls.level_phase(f,scomplex,order=order,return_leveler=True)
+
+        scomplexl = scomplex*leveler
+
+        scomplexl = numrec.smooth(scomplexl,window_len=smoothing,axis=0)
+
+        return scomplexl / leveler
 
     coincidence_exponent=2
 
@@ -810,9 +1026,8 @@ class SpectralProcessor(object):
     def align_and_envelope_spectra(self, spectra, spectra_ref,
                                    apply_envelope=True, envelope_width=1,
                                    BB_phase=False,
-                                   valid_thresh=.01, window=np.blackman,
-                                   factor=1, optimize_BB=False,
-                                   verbose=True):
+                                   smoothing=None,window=np.blackman,
+                                   **kwargs):
 
         spectra = np.array(spectra)
         spectra_ref = np.array(spectra_ref)
@@ -832,58 +1047,68 @@ class SpectralProcessor(object):
 
         # Collect all the spectra and the envelopes
         ss = []
-        ss_interp_ref = []
-        env_params = []
+        ss_ref = []
+        env_sets = []
         for i in range(Nspectra):
 
-            ## Analyte spectrum components
+            ##-------- Analyte spectrum components
             f,sabs,sphase = spectra[Nrows * i:Nrows * i+3]
-
-            ## window if necessary
             s = sabs * np.exp(1j * sphase)
-            if window: s = self.windowed_spectrum(f, s, window=window)
 
             # In case we have invalid entries (zeros), remove them
             where_valid = np.isfinite(f) * (f > 0)
             f = f[where_valid]
             s = s[where_valid]
-            ss.append(self.interpolate_spectrum(s,f,f0))
+            s = self.interpolate_spectrum(s,f,f0)
 
-            ## Reference spectrum components
+            # Touch up the spectrum in all the ways
+            if window:
+                s = self.windowed_spectrum(f, s, window=window)
+            if smoothing:
+                s=self.smoothed_spectrum(f,s,smoothing=smoothing)
+
+            # We're done
+            ss.append(s)
+
+            ##----- Reference spectrum components
             f_ref,sabs_ref,sphase_ref = spectra_ref[Nrows * i:Nrows * i+3]
-
-            # window if necessary
             s_ref = sabs_ref * np.exp(1j * sphase_ref)
-            if window: s_ref = self.windowed_spectrum(f, s_ref, window=window)
-
-            # Discard phase if we don't want it
-            if not BB_phase:
-                s_ref = np.abs(s_ref)
 
             # In case we have invalid entries (zeros), remove them
             where_valid = np.isfinite(f_ref) * (f_ref > 0)
             f_ref = f_ref[where_valid]
             s_ref = s_ref[where_valid]
-            ss_interp_ref.append(interp1d(f_ref, s_ref, **interp_kwargs))
+            s_ref = self.interpolate_spectrum(s_ref,f_ref,f0)
 
-            env_params.append(spectra_ref[Nrows * i + 4][:3])
+            # Touch up the spectrum in all the ways
+            if window:
+                s_ref = self.windowed_spectrum(f, s_ref, window=window)
+            if smoothing:
+                s_ref=self.smoothed_spectrum(f0,s_ref,smoothing=smoothing)
 
-        # Optimize calibration between BB and sample, if called for
-        args = (f0, ss, ss_interp_ref, env_params, apply_envelope, envelope_width, valid_thresh)
-        if optimize_BB:
-            result = minimize(self.calibration_to_minimize, (factor,), method='Nelder-Mead', args=args)
-            factor = result.x[0]
-            if verbose: print('Identified calibration factor:',factor)
+            # Discard phase if we don't want it
+            if not BB_phase:
+                s_ref = np.abs(s_ref)
+            # We're done
+            ss_ref.append(s_ref)
 
-        spectra_cal, spectra_BB_cal = self.apply_frequency_calibration(factor, *args[:-1])
+            # Envelope components and apply them
+            env_set = spectra_ref[Nrows * i + 4][:3]
+            env_sets.append(env_set)
+            if apply_envelope:
+                env = spectral_envelope(f0, *env_set,
+                                        expand_envelope = envelope_width)
+                env /= env.max()
+                ss_ref[-1] *= env
+                ss[-1] *= env
 
         # Sort by center frequency
-        fcenters = [env_set[1] for env_set in env_params]
+        fcenters = [env_set[1] for env_set in env_sets]
         ordering = np.argsort(fcenters)
-        spectra_cal = [spectra_cal[idx] for idx in ordering]
-        spectra_BB_cal = [spectra_BB_cal[idx] for idx in ordering]
+        ss = [ss[idx] for idx in ordering]
+        ss_ref = [ss_ref[idx] for idx in ordering]
 
-        return f0, spectra_cal, spectra_BB_cal
+        return f0, ss, ss_ref
 
     ###########
     #- User API
@@ -934,8 +1159,8 @@ class SpectralProcessor(object):
                          apply_envelope=True,
                          envelope_width=1,
                          valid_thresh=.01,
-                         window=np.blackman,
-                         optimize_BB=False,
+                         smoothing=None,
+                         window=None,
                          align_phase=True,
                          BB_normalize=True,
                          view_phase_alignment=False,
@@ -956,8 +1181,7 @@ class SpectralProcessor(object):
         f0, spectra, spectra_BB = self.align_and_envelope_spectra(all_spectra, all_spectra_BB,
                                                                   apply_envelope=apply_envelope,
                                                                   envelope_width=envelope_width,
-                                                                  factor=1,window=window,
-                                                                  optimize_BB=optimize_BB,
+                                                                  smoothing=smoothing,window=window,
                                                                   valid_thresh=valid_thresh)
 
         # Apply correction factor (as from detector calibration) if provided
@@ -1045,9 +1269,8 @@ class SpectralProcessor(object):
                  align_phase=True,
                  apply_envelope=True,
                  envelope_width=1,
-                 smoothing=None,
                  valid_thresh=.01,
-                 window=np.blackman,
+                 smoothing=None,window=np.blackman,
                  view_phase_alignment=False,
                  BB_normalize=True,
                  **kwargs):
@@ -1058,11 +1281,10 @@ class SpectralProcessor(object):
         print('Processing sample spectra...')
         self.f_sample,self.sample_spectrum_abs,self.sample_spectrum\
                                             =self.process_spectrum(target='sample',
-                                                                   optimize_BB=optimize_BB,
                                                                    apply_envelope=apply_envelope,
                                                                    envelope_width=envelope_width,
                                                                    valid_thresh=valid_thresh,
-                                                                   window=window,
+                                                                   smoothing=smoothing,window=window,
                                                                    align_phase=align_phase,
                                                                    view_phase_alignment=view_phase_alignment,
                                                                    BB_normalize=BB_normalize,
@@ -1071,11 +1293,10 @@ class SpectralProcessor(object):
         print('Processing reference spectra...')
         self.f_ref,self.ref_spectrum_abs,self.ref_spectrum\
                                         = self.process_spectrum(target='reference',
-                                                                optimize_BB=optimize_BB,
                                                                 apply_envelope=apply_envelope,
                                                                 envelope_width=envelope_width,
                                                                 valid_thresh=valid_thresh,
-                                                                window=window,
+                                                                smoothing=smoothing,window=window,
                                                                 align_phase=align_phase,
                                                                 view_phase_alignment=view_phase_alignment,
                                                                    BB_normalize=BB_normalize,
@@ -1092,12 +1313,6 @@ class SpectralProcessor(object):
 
         self.norm_spectrum_abs = self.interpolate_spectrum(self.norm_spectrum_abs,
                                                            self.f_norm_abs,self.f_norm).real
-
-        if smoothing:
-            self.norm_spectrum_abs = numrec.smooth(self.norm_spectrum_abs,
-                                                   window_len=smoothing, axis=0)
-            self.norm_spectrum = numrec.smooth(self.norm_spectrum,
-                                                   window_len=smoothing, axis=0)
 
         return self.f_norm, self.norm_spectrum_abs, self.norm_spectrum
 
@@ -1119,7 +1334,7 @@ def accumulate_spectra(spectra, apply_envelope=True, expand_envelope=1):
 
 def BB_referenced_spectrum(spectra,spectra_BB,
                           apply_envelope=True, envelope_width=1,
-                           window=False,align_phase=False,
+                           smoothing=None,align_phase=False,
                            valid_thresh=.01):
 
     try:
@@ -1131,7 +1346,7 @@ def BB_referenced_spectrum(spectra,spectra_BB,
                                             apply_envelope=apply_envelope,
                                             envelope_width=envelope_width,
                                             valid_thresh=valid_thresh,
-                                            window=window,
+                                            smoothing=smoothing,window=window,
                                             align_phase=align_phase,
                                             view_phase_alignment=False)
 
@@ -1151,9 +1366,8 @@ def BB_referenced_spectrum(spectra,spectra_BB,
 def normalized_spectrum(sample_spectra, sample_BB_spectra,
                         ref_spectra, ref_BB_spectra,
                         apply_envelope=True, envelope_width=1,
-                        window=False, align_phase=True,
-                        phase_offset=0,
-                        smoothing=None, valid_thresh=.01,
+                        level_phase=False, align_phase=True,
+                        phase_offset=0,smoothing=None, valid_thresh=.01,
                         piecewise_flattening=0):
 
     try:
@@ -1163,12 +1377,14 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
         f, snorm_abs,snorm = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
                                 smoothing=smoothing,
                                 valid_thresh=valid_thresh,
-                                window=window,
+                                window=False,
                                 optimize_BB=False,
                                 align_phase=align_phase,
                                 view_phase_alignment=False)
 
-        if piecewise_flattening:
+        if level_phase: snorm = SP.level_phase(f,snorm,order=1,manual_offset=None)
+
+        elif piecewise_flattening:
             phase = SP.get_phase(f, snorm, level_phase=False)
             to_fit = phase
             """ if not optimize_phase: to_fit = phase
