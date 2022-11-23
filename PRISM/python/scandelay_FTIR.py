@@ -129,7 +129,7 @@ xaxis=None
 def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
                          shift0=None,optimize_shift=True,shift_range=15,
                          flattening_order=5,noise=0,
-                         fit_xs=True, fit_xs_order=4,smooth_xs = 100):
+                         fit_xs=True, fit_xs_order=6,smooth_xs = 100):
 
     global dX,best_delay,xaxis
     global intfg_mutual_fwd,intfg_mutual_bwd
@@ -148,7 +148,6 @@ def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
         all_xs.append(xs)
 
     all_xs = np.mean(np.array(all_xs),axis=0)
-    all_xs *= delay_calibration_factor
 
     if fit_xs:
         Nsamples = len(all_xs)
@@ -168,7 +167,8 @@ def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
     all_ys = all_ys - np.polyval(np.polyfit(x=all_xs, y=all_ys, deg=flattening_order), all_xs)
 
     # --- Get fwd/bwd interferograms
-    idx_turn = np.argmax(all_xs)
+    idx_turn = np.argmax(all_xs) #We assume max is in midway point, BEFORE applying calibration factor
+    all_xs *= delay_calibration_factor
     all_xs_fwd = all_xs[idx_turn:]
     all_ys_fwd = all_ys[idx_turn:]
     all_xs_bwd = all_xs[:idx_turn]
@@ -177,7 +177,7 @@ def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
     #--- Determine and update the global x-range, if needed
     x1 = np.min(all_xs)
     x2 = np.max(all_xs)
-    Nbins = len(all_xs)
+    Nbins = len(all_xs)//2
     if xaxis is None:
         print('Re-using pre-existing x-axis for interferograms...')
         xaxis = np.linspace(x1, x2, Nbins)
@@ -230,6 +230,7 @@ def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
     xmin = np.max((np.min(x_fwd), np.min(x_bwd)))
     xmax = np.min((np.max(x_fwd), np.max(x_bwd)))
     xmutual = np.linspace(xmin, xmax, Nbins)
+    #raise ValueError
     intfg_mutual_fwd = intfg_fwd.interpolate_axis(xmutual, axis=0,**interp_kwargs)
     intfg_mutual_bwd = intfg_bwd.interpolate_axis(xmutual, axis=0,**interp_kwargs)
 
@@ -253,7 +254,6 @@ def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
 
     def get_x0(intfg_mutual_fwd, intfg_mutual_bwd, exp=2):
 
-        global intfg_fwd_fil, intfg_bwd_fil
         x = intfg_mutual_fwd.axes[0]
 
         intfg_fwd = intfg_mutual_fwd
@@ -265,7 +265,7 @@ def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
         return x0
 
     #--- Find average characteristic index of x0_fwd vs x0_bwd = shift0
-    if shift0 is None:
+    if not shift0:
         x0 = get_x0(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
         print('x0:', x0)
         dx = get_dx(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
@@ -273,13 +273,11 @@ def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
         x0_fwd = x0 + dx / 2
         x0_bwd = x0 - dx / 2
 
-        dns = []
-        for xs_fwd in all_xs_fwd:
-            n2 = np.argmin(np.abs(xs_fwd - x0_fwd))
-            n1 = np.argmin(np.abs(xs_fwd - x0_bwd))
-            dns.append((n2 - n1) / 2.)
+        n2 = np.argmin(np.abs(all_xs_fwd - x0_fwd))
+        n1 = np.argmin(np.abs(all_xs_fwd - x0_bwd))
+        dn=np.round((n2 - n1) / 2.)
 
-        shift0 = np.int(np.round(np.mean(dns)))
+        shift0 = np.int(dn)
         print('Initially optimal shift:', shift0)
 
     # -- Optimize around shift0
@@ -459,7 +457,7 @@ def align_interferograms_base(intfgs_arr, delay_calibration_factor=1,
         return x0
 
     #--- Find average characteristic index of x0_fwd vs x0_bwd = shift0
-    if shift0 is None:
+    if not shift0:
         x0 = get_x0(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
         print('x0:', x0)
         dx = get_dx(intfg_mutual_fwd, intfg_mutual_bwd, exp=4)
@@ -1346,7 +1344,7 @@ def BB_referenced_spectrum(spectra,spectra_BB,
                                             apply_envelope=apply_envelope,
                                             envelope_width=envelope_width,
                                             valid_thresh=valid_thresh,
-                                            smoothing=smoothing,window=window,
+                                            smoothing=smoothing,window=False,
                                             align_phase=align_phase,
                                             view_phase_alignment=False)
 
