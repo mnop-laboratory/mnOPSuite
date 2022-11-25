@@ -854,6 +854,7 @@ class SpectralProcessor(object):
         f_mutual = np.unique(np.append(f_s,f_r)) #Join and sort the frequencies
         from scipy.signal import decimate
         f_mutual = decimate(f_mutual,q=2,n=1) #down-sample by a factor of 2
+        #f_mutual = f_s
         #spectrum = interp1d(x=f_s,y=spectrum,bounds_error=False,fill_value=0,kind='linear')(f_mutual)
         #spectrum_ref = interp1d(x=f_r,y=spectrum_ref,bounds_error=False,fill_value=0,kind='linear')(f_mutual)
         spectrum = cls.interpolate_spectrum(spectrum,f_s,f_mutual)
@@ -965,7 +966,7 @@ class SpectralProcessor(object):
         if coincidence_exponent is None: coincidence_exponent=self.coincidence_exponent
         #self.s0s=[] #Debugging - check the operands for phase alignments
 
-        def aligned_spectrum(s0, s):
+        def aligned_spectrum(s0, s, p_cmp=0):
 
             #Determine and remove average phase of stot, since it could be wrapping like crazy
             leveler = self.level_phase(f, s0, order=1, manual_offset=0, return_leveler=True)
@@ -984,12 +985,12 @@ class SpectralProcessor(object):
             f0 = np.sum(f * coincidence) / norm
 
             # Decide how much of phase difference allocates to `2*pi` modulus and how much to physical shift
-            pdiff_pis = np.round(pdiff / (2 * np.pi)) * 2 * np.pi
-            phase_alignment = (pdiff - pdiff_pis) / f0
+            npis = np.round( (pdiff-p_cmp)/(2*np.pi))
+            pdiff = pdiff - npis*2*np.pi
 
-            spectrum_aligned = self.phase_displace(f, s, phase_alignment)
+            spectrum_aligned = self.phase_displace(f, s, pdiff/f0)
 
-            return spectrum_aligned, phase_alignment
+            return spectrum_aligned, pdiff
 
         #Find the spectrum with greatest weight
         weights = [np.sum(np.abs(spectrum)**2)
@@ -1005,12 +1006,16 @@ class SpectralProcessor(object):
         #Count backward, then forward
         index_list = np.append( np.arange(ind0-1,-1,-1),
                                 np.arange(ind0+1,len(spectra),1) )
+        phase_alignment_cmp = 0
         for i in index_list:
             spectrum_aligned, phase_alignment = aligned_spectrum(spectrum_cmp,
-                                                                 spectra[i])
+                                                                 spectra[i],
+                                                                 phase_alignment_cmp)
             spectra_aligned[i] = spectrum_aligned
             self.phase_alignments[i] = phase_alignment
             total_count+=1
+            if i==ind0+1: phase_alignment_cmp=0 #re-set, we compare to the `ind0` spectrum
+            else: phase_alignment_cmp=phase_alignment
 
             #When we hit the first, re-set our reference spectrum
             if i==0: spectrum_cmp=spectra[ind0]
@@ -1061,9 +1066,9 @@ class SpectralProcessor(object):
 
             # Touch up the spectrum in all the ways
             if window:
-                s = self.windowed_spectrum(f, s, window=window)
+                s = self.windowed_spectrum(f0, s, window=window)
             if smoothing:
-                s=self.smoothed_spectrum(f,s,smoothing=smoothing)
+                s=self.smoothed_spectrum(f0,s,smoothing=smoothing)
 
             # We're done
             ss.append(s)
@@ -1080,7 +1085,7 @@ class SpectralProcessor(object):
 
             # Touch up the spectrum in all the ways
             if window:
-                s_ref = self.windowed_spectrum(f, s_ref, window=window)
+                s_ref = self.windowed_spectrum(f0, s_ref, window=window)
             if smoothing:
                 s_ref=self.smoothed_spectrum(f0,s_ref,smoothing=smoothing)
 
