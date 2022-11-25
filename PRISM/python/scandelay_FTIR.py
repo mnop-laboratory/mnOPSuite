@@ -740,7 +740,7 @@ class SpectralProcessor(object):
             attempts=0; max_attempts=10
             while True:
                 p = np.unwrap(np.angle( s*leveler ))
-                m = list(np.polyfit(x=f, y=p, deg=order, w=np.abs(s)**2))
+                m = list(np.polyfit(x=f, y=p, deg=order, w=np.abs(s) **2))
                 if order == 1:  m[-1]=0 #no overall phase offsets, if we are restricting to physical offsets
                 pcorr = -np.polyval(m, f)
                 leveler *= np.exp(1j*pcorr) #Update leveler
@@ -956,7 +956,7 @@ class SpectralProcessor(object):
         return np.array(sout,dtype=np.complex)
 
     @classmethod
-    def smoothed_spectrum(cls,f,scomplex,smoothing=4,order=1):
+    def smoothed_spectrum(cls,f,scomplex,smoothing=4,order=2):
 
         leveler = cls.level_phase(f,scomplex,order=order,return_leveler=True)
 
@@ -974,10 +974,10 @@ class SpectralProcessor(object):
         if coincidence_exponent is None: coincidence_exponent=self.coincidence_exponent
         #self.s0s=[] #Debugging - check the operands for phase alignments
 
-        def aligned_spectrum(s0, s):
+        def aligned_spectrum(s0, s, p0=0):
 
             #Determine and remove average phase of stot, since it could be wrapping like crazy
-            leveler = self.level_phase(f, s0, order=1, manual_offset=0, return_leveler=True)
+            leveler = self.level_phase(f, s0 , order=1, manual_offset=0, return_leveler=True)
 
             # Debugging - check the leveling
             #self.s0s.append(num.Spectrum(AWA(s0 * leveler, axes=[f], axis_names=['X Frequency']), axis=0))
@@ -989,16 +989,17 @@ class SpectralProcessor(object):
             coincidence = (np.abs(s0) * np.abs(s)) ** coincidence_exponent
             norm = np.sum(coincidence)
 
-            pdiff = np.sum((phase0 - phase) * coincidence) / norm
-            f0 = np.sum(f * coincidence) / norm
+            p = np.sum((phase0 - phase) * coincidence) / norm
 
-            # Decide how much of phase difference allocates to `2*pi` modulus and how much to physical shift
-            pdiff_pis = np.round(pdiff / (2 * np.pi)) * 2 * np.pi
-            phase_alignment = (pdiff - pdiff_pis) / f0
+            pdiff = p-p0
+            p = p - np.round(pdiff/(2*np.pi))*2*np.pi #Add as many factors of 2*pi as minimizes `pdiff`
+            # We are assuming that a physical shift the spectrum of order 2*pi is unlikely!
 
-            spectrum_aligned = self.phase_displace(f, s, phase_alignment)
+            fcenter = np.sum(f * coincidence) / norm
 
-            return spectrum_aligned, phase_alignment
+            spectrum_aligned = self.phase_displace(f, s, p/fcenter )
+
+            return spectrum_aligned, p
 
         #Find the spectrum with greatest weight
         weights = [np.sum(np.abs(spectrum)**2)
@@ -1014,11 +1015,14 @@ class SpectralProcessor(object):
         #Count backward, then forward
         index_list = np.append( np.arange(ind0-1,-1,-1),
                                 np.arange(ind0+1,len(spectra),1) )
+        phase_alignment_cmp = 0
         for i in index_list:
-            spectrum_aligned, phase_alignment = aligned_spectrum(spectrum_cmp,
-                                                                 spectra[i])
+            spectrum_aligned, phase_alignment_cmp = aligned_spectrum(spectrum_cmp,
+                                                                    spectra[i],
+                                                                     phase_alignment_cmp)
             spectra_aligned[i] = spectrum_aligned
-            self.phase_alignments[i] = phase_alignment
+            self.phase_alignments[i] = phase_alignment_cmp
+            if i==ind0+1: phase_alignment_cmp = 0 #Re-set if we're now comparing to `ind0`
             total_count+=1
 
             #When we hit the first, re-set our reference spectrum
@@ -1298,7 +1302,7 @@ class SpectralProcessor(object):
                                                                    apply_envelope=apply_envelope,
                                                                    envelope_width=envelope_width,
                                                                    valid_thresh=valid_thresh,
-                                                                   smoothing=smoothing,window=window,
+                                                                   smoothing=None,window=window,
                                                                    align_phase=align_phase,
                                                                    view_phase_alignment=view_phase_alignment,
                                                                    BB_normalize=BB_normalize,BB_phase=BB_phase,
@@ -1310,7 +1314,7 @@ class SpectralProcessor(object):
                                                                 apply_envelope=apply_envelope,
                                                                 envelope_width=envelope_width,
                                                                 valid_thresh=valid_thresh,
-                                                                smoothing=smoothing,window=window,
+                                                                smoothing=None,window=window,
                                                                 align_phase=align_phase,
                                                                 view_phase_alignment=view_phase_alignment,
                                                                    BB_normalize=BB_normalize,BB_phase=BB_phase,
@@ -1325,6 +1329,10 @@ class SpectralProcessor(object):
 
         self.norm_spectrum_abs = self.interpolate_spectrum(self.norm_spectrum_abs,
                                                            self.f_norm_abs,self.f_norm).real
+
+        if smoothing and smoothing>1:
+            self.norm_spectrum = self.smoothed_spectrum(self.f_norm,self.norm_spectrum,smoothing,order=8)
+            self.norm_spectrum_abs = self.smoothed_spectrum(self.f_norm,self.norm_spectrum_abs,smoothing,order=8)
 
         return self.f_norm, self.norm_spectrum_abs, self.norm_spectrum
 
