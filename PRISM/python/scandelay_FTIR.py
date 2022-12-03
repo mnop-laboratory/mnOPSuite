@@ -734,9 +734,12 @@ class SpectralProcessor(object):
         return x,intfg
 
     @classmethod
-    def level_phase(cls,f, s, order=1, manual_offset=0, return_leveler=False):
+    def level_phase(cls,f, s, order=1, manual_offset=0, return_leveler=False, weighted=True):
 
         assert np.all(np.isfinite(s))
+
+        if weighted: w = np.abs(s) ** 2
+        else: w=None
 
         leveler = 1
         if order:
@@ -749,7 +752,7 @@ class SpectralProcessor(object):
             attempts=0; max_attempts=10
             while True:
                 p = np.unwrap(np.angle( s*leveler ))
-                m = list(np.polyfit(x=f, y=p, deg=order, w=np.abs(s) **2))
+                m = list(np.polyfit(x=f, y=p, deg=order, w=w))
                 if order == 1:  m[-1]=0 #no overall phase offsets, if we are restricting to physical offsets
                 pcorr = -np.polyval(m, f)
                 leveler *= np.exp(1j*pcorr) #Update leveler
@@ -766,12 +769,11 @@ class SpectralProcessor(object):
 
     @classmethod
     def get_phase(cls,f,s,
-                  level_phase=True,order=1,
-                  manual_offset=0):
+                  level_phase=True,
+                  **kwargs):
 
         if level_phase:
-            s=cls.level_phase(f,s,order=order,
-                              manual_offset=manual_offset)
+            s=cls.level_phase(f,s,**kwargs)
 
         p = np.unwrap(np.angle(s))
 
@@ -819,11 +821,18 @@ class SpectralProcessor(object):
 
         if not level: return phases
 
-        phase_avg = np.nanmean(phases,axis=0)
-        keep = np.isfinite(phase_avg)
-        poly = np.polyfit(f[keep],phase_avg[keep],deg=order)
-        background = np.polyval(poly,f)
-        for i in range(len(phases)): phases[i]-=background
+        attempts = 0
+        max_attempts = 10
+        while attempts<max_attempts:
+            phase_avg = np.nanmean(phases, axis=0)
+            keep = np.isfinite(phase_avg)
+
+            poly = np.polyfit(f[keep],np.unwrap(phase_avg[keep]),deg=order)
+            background = np.polyval(poly,f)
+            for i in range(len(phases)): phases[i]-=background
+
+            if np.sum(background) == 0: break
+            attempts +=1
 
         return phases
 
@@ -1124,10 +1133,15 @@ class SpectralProcessor(object):
             ss_ref.append(s_ref)
 
         # Sort by center frequency
-        fcenters = [env_set[1] for env_set in env_sets]
+        fcenters = np.array([env_set[1] for env_set in env_sets])
         ordering = np.argsort(fcenters)
         ss = [ss[idx] for idx in ordering]
         ss_ref = [ss_ref[idx] for idx in ordering]
+
+        #Determine global leveler that removes average x-coordinate of all interferograms
+        S = np.sum(ss,axis=0)
+        self.global_leveler = self.level_phase(f0,S,order=1,return_leveler=True)
+        ss = [s * self.global_leveler for s in ss]
 
         return f0, ss, ss_ref
 
@@ -1213,16 +1227,23 @@ class SpectralProcessor(object):
             factors=getattr(self,'%s_factors'%target)
             for s,factor in zip(spectra,factors): s *= factor
 
-        self.f0 = f0
-        self.processed_spectra = spectra
-        self.processed_spectra_BB = spectra_BB
+        # Store the processed spectra and their attributes
+        if target == 'sample':
+            self.sample_spectra_processed = spectra
+            self.sample_BB_spectra_processed = spectra_BB
+            self.sample_frequencies = f0
+            self.sample_leveler = self.global_leveler
+        else:
+            self.ref_spectra_processed = spectra
+            self.ref_BB_spectra_processed = spectra_BB
+            self.ref_frequencies = f0
+            self.ref_leveler = self.global_leveler
 
         # Align phase only if commanded, store uncorrected version as `spectra0` for comparison
         if align_phase:
             print('Aligning phase...')
-            phase_alignment_method = self.phase_aligned_spectrum
             spectra0 = spectra
-            spectra = phase_alignment_method(f0, spectra0, verbose=False)
+            spectra = self.phase_aligned_spectrum(f0, spectra0, verbose=False)
 
             if view_phase_alignment:
                 from matplotlib import pyplot as plt
@@ -1416,23 +1437,11 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                                 align_phase=align_phase,
                                 view_phase_alignment=False)
 
-        if level_phase: snorm = SP.level_phase(f,snorm,order=1,manual_offset=None)
+        if level_phase: snorm = SP.level_phase(f,snorm,order=1,manual_offset=None,weighted=False)
 
         elif piecewise_flattening:
             phase = SP.get_phase(f, snorm, level_phase=False)
             to_fit = phase
-            """ if not optimize_phase: to_fit = phase
-            else:
-                # We want to bring "aligned" phase closer to its unadulterated version via piecewise slopes
-                f, _, snorm0 = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
-                                  smoothing=smoothing,
-                                 valid_thresh=valid_thresh,
-                                 optimize_BB=optimize_BB,
-                                 optimize_phase=False,
-                                 view_phase_alignment=False)
-                phase0 = SP.get_phase(f, snorm0, level_phase=False)
-                to_fit = phase - phase0"""
-
             offset,params = numrec.PiecewiseLinearFit(f,to_fit,nbreakpoints=piecewise_flattening,error_exp=2)
             phase -= offset
             snorm = snorm_abs*np.exp(1j*phase)
@@ -1441,7 +1450,6 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
         phase=SP.get_phase(f, snorm, level_phase=True,
                            order=0, manual_offset=phase_offset) #Only level using the offset we apply
 
-        # `get_phase` will apply some phase leveling
         return np.array([f,
                          snorm_abs.real,
                          phase.real], dtype=np.float)
