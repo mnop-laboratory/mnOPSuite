@@ -131,7 +131,7 @@ def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
                          flattening_order=5,noise=0,
                          fit_xs=True, fit_xs_order=6,smooth_xs = 100):
 
-    global dX,best_delay,xaxis
+    global dX,best_delay,xaxis,all_xs0,all_xs_fitted
     global intfg_mutual_fwd,intfg_mutual_bwd
     if best_delay is None: best_delay=shift0
 
@@ -164,7 +164,9 @@ def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
         print('Fitted sinusoid parameters for X coordinate:')
         for i,(amp,phase) in enumerate(amps_phases):
             print('Harmonic %i: amp=%1.2G, phase=%1.2f'%(i+1,amp,phase%(2*np.pi)))
+        all_xs0 = all_xs
         all_xs = model_xs(indices, params)
+        all_xs_fitted = all_xs
 
     all_ys = np.mean(np.array(all_ys),axis=0)
     all_ys = all_ys - np.polyval(np.polyfit(x=all_xs, y=all_ys, deg=flattening_order), all_xs)
@@ -328,14 +330,21 @@ def align_interferograms_base(intfgs_arr, delay_calibration_factor=1,
         ys, xs = intfgs_arr[2 * i:2 * (i + 1)]
 
         if fit_xs:
-            offset = np.mean(xs); period = float(Nsamples)
-            amps = [0]*fit_xs_order; amps[0]=np.ptp(xs)/2
-            phases=[0]*fit_xs_order
-            params0 = [offset,period]
-            for amp,phase in zip(amps,phases): params0 = params0+[amp,phase]
-            params,_ = numrec.ParameterFit(indices,xs,model_xs,params0)
-            if i-Ncycles==-1: print(params[2:])
-            xs = model_xs(indices,params)
+            Nsamples = len(xs)
+            indices = np.arange(Nsamples)
+            offset = np.mean(xs)
+            period = float(Nsamples)
+            amps = [0] * fit_xs_order
+            amps[0] = np.ptp(xs) / 2
+            phases = [0] * fit_xs_order
+            params0 = [offset, period]
+            for amp, phase in zip(amps, phases): params0 = params0 + [amp, phase]
+            params, _ = numrec.ParameterFit(indices, xs, model_xs, params0)
+            amps_phases = np.array(params[2:]).reshape((fit_xs_order, 2))
+            print('Fitted sinusoid parameters for X coordinate:')
+            for j, (amp, phase) in enumerate(amps_phases):
+                print('Harmonic %i: amp=%1.2G, phase=%1.2f' % (j + 1, amp, phase % (2 * np.pi)))
+            xs = model_xs(indices, params)
 
         elif smooth_xs:
             xs = numrec.smooth(xs, window_len=smooth_xs, axis=0)
@@ -865,8 +874,8 @@ class SpectralProcessor(object):
             f_mutual = decimate(f_mutual,q=decimation,n=1) #down-sample by a factor of 2
             print(len(f_mutual0),'-->',len(f_mutual))
 
-        spectrum = cls.interpolate_spectrum(spectrum,f_s,f_mutual,order=4)
-        spectrum_ref = cls.interpolate_spectrum(spectrum_ref,f_r,f_mutual,order=4)
+        spectrum = cls.interpolate_spectrum(spectrum,f_s,f_mutual,order=8)
+        spectrum_ref = cls.interpolate_spectrum(spectrum_ref,f_r,f_mutual,order=8)
 
         thresh = valid_thresh * np.abs(spectrum_ref[np.isfinite(spectrum_ref)]).max()
         where_valid = np.abs(spectrum_ref) > thresh
@@ -966,7 +975,7 @@ class SpectralProcessor(object):
 
         return scomplexl / leveler
 
-    coincidence_exponent=2
+    coincidence_exponent=6
 
     def phase_aligned_spectrum(self, f, spectra, verbose=False,
                                coincidence_exponent=None):
@@ -1033,7 +1042,6 @@ class SpectralProcessor(object):
 
         return spectra_aligned
 
-    #@TODO: remove the BB-optimization
     def align_and_envelope_spectra(self, spectra, spectra_ref,
                                    apply_envelope=True, envelope_width=1,
                                    BB_phase=False,
@@ -1288,7 +1296,7 @@ class SpectralProcessor(object):
                  apply_envelope=True,
                  envelope_width=1,
                  valid_thresh=.01,
-                 smoothing=None,window=np.blackman,
+                 smoothing=None,window=None,
                  view_phase_alignment=False,
                  BB_normalize=True,BB_phase=False,
                  **kwargs):
@@ -1307,6 +1315,9 @@ class SpectralProcessor(object):
                                                                    view_phase_alignment=view_phase_alignment,
                                                                    BB_normalize=BB_normalize,BB_phase=BB_phase,
                                                                    **kwargs)
+        #Smooth magnitude spectrum before normalization
+        if smoothing and smoothing>1:
+            self.sample_spectrum_abs = self.smoothed_spectrum(self.f_sample,self.sample_spectrum_abs,smoothing,order=12)
 
         print('Processing reference spectra...')
         self.f_ref,self.ref_spectrum_abs,self.ref_spectrum\
@@ -1319,6 +1330,9 @@ class SpectralProcessor(object):
                                                                 view_phase_alignment=view_phase_alignment,
                                                                    BB_normalize=BB_normalize,BB_phase=BB_phase,
                                                                 **kwargs)
+        #Smooth magnitude spectrum before normalization
+        if smoothing and smoothing>1:
+            self.ref_spectrum_abs = self.smoothed_spectrum(self.f_ref,self.ref_spectrum_abs,smoothing,order=12)
 
         self.f_norm_abs, self.norm_spectrum_abs = self.normalize_spectrum(self.f_sample, self.sample_spectrum_abs,
                                                                             self.f_ref, self.ref_spectrum_abs,
@@ -1330,9 +1344,9 @@ class SpectralProcessor(object):
         self.norm_spectrum_abs = self.interpolate_spectrum(self.norm_spectrum_abs,
                                                            self.f_norm_abs,self.f_norm).real
 
+        # Smooth complex spectrum only after normalization
         if smoothing and smoothing>1:
-            self.norm_spectrum = self.smoothed_spectrum(self.f_norm,self.norm_spectrum,smoothing,order=8)
-            self.norm_spectrum_abs = self.smoothed_spectrum(self.f_norm,self.norm_spectrum_abs,smoothing,order=8)
+            self.norm_spectrum = self.smoothed_spectrum(self.f_norm,self.norm_spectrum,smoothing,order=12)
 
         return self.f_norm, self.norm_spectrum_abs, self.norm_spectrum
 
