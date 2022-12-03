@@ -976,7 +976,7 @@ class SpectralProcessor(object):
     @classmethod
     def smoothed_spectrum(cls,f,scomplex,smoothing=4,order=2):
 
-        leveler = cls.level_phase(f,scomplex,order=order,return_leveler=True)
+        leveler = cls.level_phase(f,scomplex,order=order,return_leveler=True,weighted=False)
 
         scomplexl = scomplex*leveler
 
@@ -1338,7 +1338,7 @@ class SpectralProcessor(object):
                                                                    **kwargs)
         #Smooth magnitude spectrum before normalization
         if smoothing and smoothing>1:
-            self.sample_spectrum_abs = self.smoothed_spectrum(self.f_sample,self.sample_spectrum_abs,smoothing,order=12)
+            self.sample_spectrum_abs = self.smoothed_spectrum(self.f_sample,self.sample_spectrum_abs,smoothing,order=1) #magnitude spectrum, no leveling required
 
         print('Processing reference spectra...')
         self.f_ref,self.ref_spectrum_abs,self.ref_spectrum\
@@ -1353,7 +1353,7 @@ class SpectralProcessor(object):
                                                                 **kwargs)
         #Smooth magnitude spectrum before normalization
         if smoothing and smoothing>1:
-            self.ref_spectrum_abs = self.smoothed_spectrum(self.f_ref,self.ref_spectrum_abs,smoothing,order=12)
+            self.ref_spectrum_abs = self.smoothed_spectrum(self.f_ref,self.ref_spectrum_abs,smoothing,order=1) #magnitude spectrum, no leveling required
 
         self.f_norm_abs, self.norm_spectrum_abs = self.normalize_spectrum(self.f_sample, self.sample_spectrum_abs,
                                                                             self.f_ref, self.ref_spectrum_abs,
@@ -1367,7 +1367,7 @@ class SpectralProcessor(object):
 
         # Smooth complex spectrum only after normalization
         if smoothing and smoothing>1:
-            self.norm_spectrum = self.smoothed_spectrum(self.f_norm,self.norm_spectrum,smoothing,order=12)
+            self.norm_spectrum = self.smoothed_spectrum(self.f_norm,self.norm_spectrum,smoothing,order=4)
 
         return self.f_norm, self.norm_spectrum_abs, self.norm_spectrum
 
