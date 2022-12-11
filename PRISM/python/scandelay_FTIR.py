@@ -1394,16 +1394,16 @@ def BB_referenced_spectrum(spectra,spectra_BB,
 
     try:
         SP=SpectralProcessor(spectra,spectra_BB,
-                             [],[]) #Leave reference spectra empty
+                             spectra_BB,spectra_BB)
 
-        f, spectrum_abs, spectrum =\
-                        SP.process_spectrum(target='sample',
-                                            apply_envelope=apply_envelope,
-                                            envelope_width=envelope_width,
-                                            valid_thresh=valid_thresh,
-                                            smoothing=smoothing,window=False,
-                                            align_phase=align_phase,
-                                            view_phase_alignment=False)
+        # `BB_normalize=False` is key, to use only the envelope from BB, but overall normalize spectra directly to BB
+        f, spectrum_abs, spectrum = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
+                                     smoothing=smoothing,
+                                     valid_thresh=valid_thresh,
+                                     window=False,
+                                     BB_normalize=False,
+                                     align_phase=align_phase,
+                                     view_phase_alignment=False)
 
         phase = SP.get_phase(f, spectrum, level_phase=True)
 
