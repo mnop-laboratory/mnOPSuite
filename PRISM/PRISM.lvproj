@@ -1,6 +1,7 @@
 ﻿<?xml version='1.0' encoding='UTF-8'?>
 <Project Type="Project" LVVersion="22308000">
 	<Item Name="My Computer" Type="My Computer">
+		<Property Name="NI.SortType" Type="Int">3</Property>
 		<Property Name="server.app.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="server.control.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="server.tcp.enabled" Type="Bool">false</Property>
@@ -69,30 +70,15 @@
 			<Property Name="Start.DigEdge.Src" Type="Str">PFI0</Property>
 			<Property Name="Start.TrigType" Type="Str">Digital Edge</Property>
 		</Item>
-		<Item Name="DetectorV" Type="NI-DAQmx Channel">
-			<Property Name="AI.Max" Type="Str">10</Property>
-			<Property Name="AI.MeasType" Type="Str">Voltage</Property>
-			<Property Name="AI.Min" Type="Str">-10</Property>
-			<Property Name="AI.TermCfg" Type="Str">Differential</Property>
-			<Property Name="AI.Voltage.Units" Type="Str">Volts</Property>
-			<Property Name="ChanType" Type="Str">Analog Input</Property>
-			<Property Name="Descr" Type="Str"></Property>
-			<Property Name="Name" Type="Str">DetectorV</Property>
-			<Property Name="PhysicalChanName" Type="Str">Dev1/ai0</Property>
-		</Item>
 		<Item Name="NewportFlipper.vi" Type="VI" URL="../../Peripherals/NewportFlipper.vi"/>
 		<Item Name="PRISM_RasterScan.vi" Type="VI" URL="../PRISM_RasterScan.vi"/>
 		<Item Name="PRISM_RasterScan_BSC202.vi" Type="VI" URL="../PRISM_RasterScan_BSC202.vi"/>
 		<Item Name="python_test.vi" Type="VI" URL="../Diagnostic/python_test.vi"/>
-		<Item Name="ScanDelay_FTIR_AcquireInterferogram.vi" Type="VI" URL="../ScanDelay_FTIR_AcquireInterferogram.vi"/>
 		<Item Name="ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi" Type="VI" URL="../ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi"/>
-		<Item Name="ScanDelay_FTIR_BBnorm.vi" Type="VI" URL="../ScanDelay_FTIR_BBnorm.vi"/>
-		<Item Name="ScanDelay_FTIR_BBnorm_Aligning_NewportFlipper.vi" Type="VI" URL="../ScanDelay_FTIR_BBnorm_Aligning_NewportFlipper.vi"/>
-		<Item Name="ScanDelay_FTIR_BBnorm_Aligning_NewportFlipper_AttenuateBB.vi" Type="VI" URL="../ScanDelay_FTIR_BBnorm_Aligning_NewportFlipper_AttenuateBB.vi"/>
-		<Item Name="ScanDelay_FTIR_GetSpectrum.vi" Type="VI" URL="../ScanDelay_FTIR_GetSpectrum.vi"/>
 		<Item Name="ScanDelay_FTIR_GetSpectrum_Aligning.vi" Type="VI" URL="../ScanDelay_FTIR_GetSpectrum_Aligning.vi"/>
-		<Item Name="ScanDelay_FTIR_GetSpectrum_Aligning_ProducerConsumer.vi" Type="VI" URL="../ScanDelay_FTIR_GetSpectrum_Aligning_ProducerConsumer.vi"/>
 		<Item Name="ScanDelay_FTIR_InterferogramDAQmxTask.vi" Type="VI" URL="../ScanDelay_FTIR_InterferogramDAQmxTask.vi"/>
+		<Item Name="ScanDelay_FTIR_PointSpectroscopy.vi" Type="VI" URL="../ScanDelay_FTIR_PointSpectroscopy.vi"/>
+		<Item Name="ScanDelay_FTIR_LineScanSpectroscopy.vi" Type="VI" URL="../ScanDelay_FTIR_LineScanSpectroscopy.vi"/>
 		<Item Name="ScanDelayTrigger" Type="NI-DAQmx Channel">
 			<Property Name="ChanType" Type="Str">Digital Input</Property>
 			<Property Name="Descr" Type="Str"></Property>
@@ -118,6 +104,8 @@
 			<Property Name="Name" Type="Str">ScanDelayX</Property>
 			<Property Name="PhysicalChanName" Type="Str">Dev1/ai1</Property>
 		</Item>
+		<Item Name="LineScanCounterAE.vi" Type="VI" URL="../LineScanCounterAE.vi"/>
+		<Item Name="Control_LineScanCounterAE.ctl" Type="VI" URL="../Control_LineScanCounterAE.ctl"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="vi.lib" Type="Folder">
 				<Item Name="Check Color Table Size.vi" Type="VI" URL="/&lt;vilib&gt;/picture/jpeg.llb/Check Color Table Size.vi"/>
@@ -350,7 +338,6 @@
 				<Item Name="Error Cluster From Error Code.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Error Cluster From Error Code.vi"/>
 				<Item Name="imagedata.ctl" Type="VI" URL="/&lt;vilib&gt;/picture/picture.llb/imagedata.ctl"/>
 				<Item Name="NI_AALBase.lvlib" Type="Library" URL="/&lt;vilib&gt;/Analysis/NI_AALBase.lvlib"/>
-				<Item Name="NI_Matrix.lvlib" Type="Library" URL="/&lt;vilib&gt;/Analysis/Matrix/NI_Matrix.lvlib"/>
 				<Item Name="Number of Waveform Samples.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/WDTOps.llb/Number of Waveform Samples.vi"/>
 				<Item Name="sub Waveform Array To Dynamic.vi" Type="VI" URL="/&lt;vilib&gt;/DAQmx/miscellaneous.llb/sub Waveform Array To Dynamic.vi"/>
 				<Item Name="WDT Number of Waveform Samples CDB.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/WDTOps.llb/WDT Number of Waveform Samples CDB.vi"/>
@@ -362,9 +349,8 @@
 				<Item Name="WDT Number of Waveform Samples SGL.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/WDTOps.llb/WDT Number of Waveform Samples SGL.vi"/>
 				<Item Name="Write PNG File.vi" Type="VI" URL="/&lt;vilib&gt;/picture/png.llb/Write PNG File.vi"/>
 			</Item>
-			<Item Name="Control_AcquireSpectrum.ctl" Type="VI" URL="../../ScanDelay/Control_AcquireSpectrum.ctl"/>
 			<Item Name="Control_GetSpectrum_Aligning.ctl" Type="VI" URL="../Control_GetSpectrum_Aligning.ctl"/>
-			<Item Name="Control_GetSpectrum_BBnorm_AttenuateBB.ctl" Type="VI" URL="../Control_GetSpectrum_BBnorm_AttenuateBB.ctl"/>
+			<Item Name="Control_GetSpectrum_LineScanSpectroscopy.ctl" Type="VI" URL="../Control_GetSpectrum_LineScanSpectroscopy.ctl"/>
 			<Item Name="Control_scanDelayWorkflow.ctl" Type="VI" URL="../Control_scanDelayWorkflow.ctl"/>
 			<Item Name="lvanlys.dll" Type="Document" URL="/&lt;resource&gt;/lvanlys.dll"/>
 			<Item Name="nilvaiu.dll" Type="Document" URL="nilvaiu.dll">
@@ -372,8 +358,8 @@
 			</Item>
 			<Item Name="Thorlabs.MotionControl.Benchtop.StepperMotorCLI.dll" Type="Document" URL="../Thorlabs.MotionControl.Benchtop.StepperMotorCLI.dll"/>
 			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="../Thorlabs.MotionControl.Controls.dll"/>
-			<Item Name="Thorlabs.MotionControl.FilterFlipperCLI.dll" Type="Document" URL="../Thorlabs.MotionControl.FilterFlipperCLI.dll"/>
 			<Item Name="Thorlabs.MotionControl.KCube.StepperMotorCLI.dll" Type="Document" URL="../Thorlabs.MotionControl.KCube.StepperMotorCLI.dll"/>
+			<Item Name="Control_GetSpectrum_BBnorm_AttenuateBB.ctl" Type="VI" URL="../Control_GetSpectrum_BBnorm_AttenuateBB.ctl"/>
 		</Item>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>
