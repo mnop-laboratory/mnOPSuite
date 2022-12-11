@@ -923,6 +923,9 @@ class SpectralProcessor(object):
 
             # In case we have invalid entries (zeros), remove them
             where_valid = np.isfinite(f) * (f > 0)
+            if not where_valid.any():
+                print('Spectrum at entry %i is inferred empty!' % i)
+                continue
             f = f[where_valid]
             s = s[where_valid]
 
@@ -1081,7 +1084,6 @@ class SpectralProcessor(object):
 
             # Envelope components and apply them
             env_set = spectra_ref[Nrows * i + 4][:3]
-            env_sets.append(env_set)
             if apply_envelope:
                 env = spectral_envelope(f0, *env_set,
                                         expand_envelope = envelope_width)
@@ -1093,6 +1095,9 @@ class SpectralProcessor(object):
 
             # In case we have invalid entries (zeros), remove them
             where_valid = np.isfinite(f) * (f > 0)
+            if not where_valid.any():
+                print('Spectrum at entry %i is inferred empty!' % i)
+                continue
             f = f[where_valid]
             s = s[where_valid]
 
@@ -1106,7 +1111,6 @@ class SpectralProcessor(object):
             if apply_envelope: s *= env
 
             # We're done
-            ss.append(s)
 
             ##----- Reference spectrum components
             f_ref,sabs_ref,sphase_ref = spectra_ref[Nrows * i:Nrows * i+3]
@@ -1114,6 +1118,9 @@ class SpectralProcessor(object):
 
             # In case we have invalid entries (zeros), remove them
             where_valid = np.isfinite(f_ref) * (f_ref > 0)
+            if not where_valid.any():
+                print('Spectrum at entry %i is inferred empty!' % i)
+                continue
             f_ref = f_ref[where_valid]
             s_ref = s_ref[where_valid]
 
@@ -1129,7 +1136,10 @@ class SpectralProcessor(object):
             # Discard phase if we don't want it
             if not BB_phase:
                 s_ref = np.abs(s_ref)
+
             # We're done
+            env_sets.append(env_set)
+            ss.append(s)
             ss_ref.append(s_ref)
 
         # Sort by center frequency
