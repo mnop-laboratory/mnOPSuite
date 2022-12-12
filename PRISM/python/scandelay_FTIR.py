@@ -907,7 +907,7 @@ class SpectralProcessor(object):
 
         # Establish some mutual frequency axis
         all_fs = np.array([spectra[Nrows * i] for i in range(Nspectra)])
-        f0 = spectra[0] #all_fs[0] #np.unique(all_fs.flatten())
+        f0 = None
 
         # Collect all the spectra and the envelopes
         ss = []
@@ -928,6 +928,9 @@ class SpectralProcessor(object):
                 continue
             f = f[where_valid]
             s = s[where_valid]
+
+            # Establish some mutual frequency axis
+            if f0 is None: f0=f
 
             s = cls.interpolate_spectrum(s,f,f0)
             if apply_envelope:
@@ -1072,22 +1075,13 @@ class SpectralProcessor(object):
         Nspectra = np.max((len(spectra) // Nrows, 1))
 
         # Establish some mutual frequency axis
-        all_fs = np.array([spectra[Nrows * i] for i in range(Nspectra)]+
-                           [spectra_ref[Nrows * i] for i in range(Nspectra)])
-        f0 = spectra[0] #all_fs[0]#np.unique(all_fs.flatten())
+        f0 = None
 
         # Collect all the spectra and the envelopes
         ss = []
         ss_ref = []
         env_sets = []
         for i in range(Nspectra):
-
-            # Envelope components and apply them
-            env_set = spectra_ref[Nrows * i + 4][:3]
-            if apply_envelope:
-                env = spectral_envelope(f0, *env_set,
-                                        expand_envelope = envelope_width)
-                env /= env.max()
 
             ##-------- Analyte spectrum components
             f,sabs,sphase = spectra[Nrows * i:Nrows * i+3]
@@ -1100,6 +1094,16 @@ class SpectralProcessor(object):
                 continue
             f = f[where_valid]
             s = s[where_valid]
+
+            # Establish some mutual frequency axis
+            if f0 is None: f0=f
+
+            # Envelope components and apply them
+            env_set = spectra_ref[Nrows * i + 4][:3]
+            if apply_envelope:
+                env = spectral_envelope(f0, *env_set,
+                                        expand_envelope = envelope_width)
+                env /= env.max()
 
             # Touch up the spectrum in all the ways
             # Smooth before applying envelope
