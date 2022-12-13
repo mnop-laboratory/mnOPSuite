@@ -107,6 +107,10 @@
 		<Item Name="LineScanCounterAE.vi" Type="VI" URL="../LineScanCounterAE.vi"/>
 		<Item Name="Control_LineScanCounterAE.ctl" Type="VI" URL="../Control_LineScanCounterAE.ctl"/>
 		<Item Name="FlattenPages.vi" Type="VI" URL="../../Peripherals/FlattenPages.vi"/>
+		<Item Name="LineScanController.vi" Type="VI" URL="../LineScanController.vi"/>
+		<Item Name="SpectralProcessor.vi" Type="VI" URL="../SpectralProcessor.vi"/>
+		<Item Name="SpectralNormalizationSettings.ctl" Type="VI" URL="../SpectralNormalizationSettings.ctl"/>
+		<Item Name="Control_SpectralProcessor.ctl" Type="VI" URL="../Control_SpectralProcessor.ctl"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="vi.lib" Type="Folder">
 				<Item Name="Check Color Table Size.vi" Type="VI" URL="/&lt;vilib&gt;/picture/jpeg.llb/Check Color Table Size.vi"/>

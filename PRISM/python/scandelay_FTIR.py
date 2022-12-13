@@ -734,7 +734,8 @@ class SpectralProcessor(object):
         return x,intfg
 
     @classmethod
-    def level_phase(cls,f, s, order=1, manual_offset=0, return_leveler=False, weighted=True):
+    def level_phase(cls,f, s, order=1, manual_offset=0, return_leveler=False,
+                    weighted=True, subtract_baseline=False):
 
         assert np.all(np.isfinite(s))
 
@@ -753,7 +754,8 @@ class SpectralProcessor(object):
             while True:
                 p = np.unwrap(np.angle( s*leveler ))
                 m = list(np.polyfit(x=f, y=p, deg=order, w=w))
-                if order == 1:  m[-1]=0 #no overall phase offsets, if we are restricting to physical offsets
+                if order == 1 and \
+                    not subtract_baseline:  m[-1]=0 #no overall phase offsets, if we are restricting to physical offsets
                 pcorr = -np.polyval(m, f)
                 leveler *= np.exp(1j*pcorr) #Update leveler
                 if np.isclose(np.sum(m[:-1]),0)\
@@ -1334,6 +1336,7 @@ class SpectralProcessor(object):
                  smoothing=None,window=None,
                  view_phase_alignment=False,
                  BB_normalize=True,BB_phase=False,
+                 recompute_reference=True,
                  **kwargs):
         """This normalizes sample and reference spectra to their
         respective bright-beam spectra, and then normalizes these
@@ -1354,20 +1357,25 @@ class SpectralProcessor(object):
         if smoothing and smoothing>1:
             self.sample_spectrum_abs = self.smoothed_spectrum(self.f_sample,self.sample_spectrum_abs,smoothing,order=1) #magnitude spectrum, no leveling required
 
-        print('Processing reference spectra...')
-        self.f_ref,self.ref_spectrum_abs,self.ref_spectrum\
-                                        = self.process_spectrum(target='reference',
-                                                                apply_envelope=apply_envelope,
-                                                                envelope_width=envelope_width,
-                                                                valid_thresh=valid_thresh,
-                                                                smoothing=None,window=window,
-                                                                align_phase=align_phase,
-                                                                view_phase_alignment=view_phase_alignment,
-                                                                   BB_normalize=BB_normalize,BB_phase=BB_phase,
-                                                                **kwargs)
-        #Smooth magnitude spectrum before normalization
-        if smoothing and smoothing>1:
-            self.ref_spectrum_abs = self.smoothed_spectrum(self.f_ref,self.ref_spectrum_abs,smoothing,order=1) #magnitude spectrum, no leveling required
+        #See if we can get away with not recomputing reference spectrum
+        try:
+            if recompute_reference: raise AttributeError
+            self.f_ref,self.ref_spectrum_abs,self.ref_spectrum
+        except AttributeError:
+            print('Processing reference spectra...')
+            self.f_ref,self.ref_spectrum_abs,self.ref_spectrum\
+                                            = self.process_spectrum(target='reference',
+                                                                    apply_envelope=apply_envelope,
+                                                                    envelope_width=envelope_width,
+                                                                    valid_thresh=valid_thresh,
+                                                                    smoothing=None,window=window,
+                                                                    align_phase=align_phase,
+                                                                    view_phase_alignment=view_phase_alignment,
+                                                                       BB_normalize=BB_normalize,BB_phase=BB_phase,
+                                                                    **kwargs)
+            #Smooth magnitude spectrum before normalization
+            if smoothing and smoothing>1:
+                self.ref_spectrum_abs = self.smoothed_spectrum(self.f_ref,self.ref_spectrum_abs,smoothing,order=1) #magnitude spectrum, no leveling required
 
         self.f_norm_abs, self.norm_spectrum_abs = self.normalize_spectrum(self.f_sample, self.sample_spectrum_abs,
                                                                             self.f_ref, self.ref_spectrum_abs,
@@ -1432,6 +1440,61 @@ def BB_referenced_spectrum(spectra,spectra_BB,
 
         raise
 
+def BB_referenced_linescan(linescan,spectra_BB,
+                          apply_envelope=True, envelope_width=1,
+                           smoothing=None,align_phase=False,
+                           valid_thresh=.01):
+
+    try:
+
+        fmutual = None
+        SP = None
+        spectra_abs = []; phases=[]
+        for spectra in linescan:
+
+            if SP is None:
+                SP=SpectralProcessor(spectra,spectra_BB,
+                                     spectra_BB,spectra_BB)
+            else:
+                SP.sample_spectra = spectra #re-set sample spectra, only
+
+            # `BB_normalize=False` is key, to use only the envelope from BB, but overall normalize spectra directly to BB
+            f, spectrum_abs, spectrum = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
+                                         smoothing=smoothing,
+                                         valid_thresh=valid_thresh,
+                                         BB_normalize=False,
+                                         align_phase=align_phase,
+                                         view_phase_alignment=False,
+                                         recompute_reference=False) #`recompute_reference=False` saves us half our effort
+            phase = SP.get_phase(f, spectrum, level_phase=True)
+
+            if fmutual is None:  fmutual = f
+            else:
+                phase = interp1d(f,phase,**interp_kwargs)(fmutual)
+                spectrum_abs = interp1d(f,spectrum_abs,**interp_kwargs)(fmutual)
+
+            spectra_abs.append(spectrum_abs)
+            phases.append(phase)
+
+        #Put everything together as three pages in a 3D array
+        # 1) N copies of frequency axis (could in general have been distinct axes)
+        # 2) N abs spectra
+        # 3) N phase spectra
+        fmutuals = np.array([fmutual]*len(linescan))
+        spectra_abs = np.array(spectra_abs)
+        phases = np.array(phases)
+
+        return np.array([fmutuals.real,
+                         spectra_abs.real,
+                         phases.real],dtype=np.float)
+    except:
+        error_text = str(traceback.format_exc())
+        error_file = os.path.join(diagnostic_dir,'BB_referenced_linescan.err')
+        with open(error_file,'w') as f:
+            f.write(error_text)
+
+        raise
+
 def normalized_spectrum(sample_spectra, sample_BB_spectra,
                         ref_spectra, ref_BB_spectra,
                         apply_envelope=True, envelope_width=1,
@@ -1447,7 +1510,6 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                                 smoothing=smoothing,
                                 valid_thresh=valid_thresh,
                                 window=False,
-                                optimize_BB=False,
                                 align_phase=align_phase,
                                 view_phase_alignment=False)
 
@@ -1476,3 +1538,76 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
         with open(error_file,'w') as f: f.write(error_text)
 
         return False
+
+def normalized_linescan(sample_linescan, sample_BB_spectra,
+                        ref_spectra, ref_BB_spectra,
+                        apply_envelope=True, envelope_width=1,
+                        level_phase=False, align_phase=True,
+                        phase_offset=0,smoothing=None, valid_thresh=.01,
+                        piecewise_flattening=0):
+
+    try:
+
+        fmutual = None
+        SP = None
+        snorms_abs = []; phases=[]
+        for sample_spectra in sample_linescan:
+
+            if SP is None:
+                SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
+                                       ref_spectra, ref_BB_spectra)
+            else:
+                SP.sample_spectra = sample_spectra #re-set sample spectra, only
+
+            f, snorm_abs, snorm = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
+                                     smoothing=smoothing,
+                                     valid_thresh=valid_thresh,
+                                     window=False,
+                                     align_phase=align_phase,
+                                     view_phase_alignment=False,
+                                     recompute_reference=False) #`recompute_reference=False` saves us half our effort
+
+            if level_phase:
+                snorm = SP.level_phase(f, snorm, order=1, manual_offset=None, weighted=False)
+
+            elif piecewise_flattening:
+                phase = SP.get_phase(f, snorm, level_phase=False)
+                to_fit = phase
+                offset, params = numrec.PiecewiseLinearFit(f, to_fit, nbreakpoints=piecewise_flattening, error_exp=2)
+                phase -= offset
+                snorm = snorm_abs * np.exp(1j * phase)
+
+            # Now finally apply manual offset
+            phase = SP.get_phase(f, snorm, level_phase=True,
+                                 order=0, manual_offset=phase_offset)  # Only level using the offset we apply
+
+            # If we did align phase, we'll have all sorts of point-to-point baseline shifts in linescan
+            if align_phase:
+                phase -= np.mean(phase)
+
+            if fmutual is None:  fmutual = f
+            else:
+                phase = interp1d(f,phase,**interp_kwargs)(fmutual)
+                snorm_abs = interp1d(f,snorm_abs,**interp_kwargs)(fmutual)
+
+            snorms_abs.append(snorm_abs)
+            phases.append(phase)
+
+        #Put everything together as three pages in a 3D array
+        # 1) N copies of frequency axis (could in general have been distinct axes)
+        # 2) N abs spectra
+        # 3) N phase spectra
+        fmutuals = np.array([fmutual]*len(sample_linescan))
+        snorms_abs = np.array(snorms_abs)
+        phases = np.array(phases)
+
+        return np.array([fmutuals.real,
+                         snorms_abs.real,
+                         phases.real],dtype=np.float)
+    except:
+        error_text = str(traceback.format_exc())
+        error_file = os.path.join(diagnostic_dir,'normalized_linescan.err')
+        with open(error_file,'w') as f:
+            f.write(error_text)
+
+        raise
