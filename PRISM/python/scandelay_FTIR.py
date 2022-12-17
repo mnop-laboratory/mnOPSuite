@@ -574,16 +574,19 @@ def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=3000):
 
     v = v-np.mean(v)
     v *= gain
-    # w = np.blackman(len(v))
+    w = np.blackman(len(v))
     #wmax_ind = np.argmax(w) #Let's roll window to position of maximum weight in interferogram
     #centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
     #imax_ind = np.argmin((centerd - d) ** 2)
     #w = np.roll(w, imax_ind - wmax_ind, axis=0)
-    w = 1 #We are disabling the windowing for now
+    #w = 1 #We are disabling the windowing for now
 
+    pow0 = np.sum(v**2)
     v *= w
+    pownew = np.sum(v**2)
+    norm = np.sqrt(pow0/pownew)
     v = AWA(v, axes=[d])
-    s = num.Spectrum(v, axis=0)
+    s = num.Spectrum(v, axis=0) * norm
     f = s.axes[0]
 
     # Just discard the information about absolute coordinates;
@@ -1355,7 +1358,8 @@ class SpectralProcessor(object):
                                                                    **kwargs)
         #Smooth magnitude spectrum before normalization
         if smoothing and smoothing>1:
-            self.sample_spectrum_abs = self.smoothed_spectrum(self.f_sample,self.sample_spectrum_abs,smoothing,order=1) #magnitude spectrum, no leveling required
+            self.sample_spectrum_abs = self.smoothed_spectrum(self.f_sample,self.sample_spectrum_abs,
+                                                              smoothing,order=1) #magnitude spectrum, no leveling required
 
         #See if we can get away with not recomputing reference spectrum
         try:
@@ -1375,7 +1379,8 @@ class SpectralProcessor(object):
                                                                     **kwargs)
             #Smooth magnitude spectrum before normalization
             if smoothing and smoothing>1:
-                self.ref_spectrum_abs = self.smoothed_spectrum(self.f_ref,self.ref_spectrum_abs,smoothing,order=1) #magnitude spectrum, no leveling required
+                self.ref_spectrum_abs = self.smoothed_spectrum(self.f_ref,self.ref_spectrum_abs,
+                                                               smoothing,order=1) #magnitude spectrum, no leveling required
 
         self.f_norm_abs, self.norm_spectrum_abs = self.normalize_spectrum(self.f_sample, self.sample_spectrum_abs,
                                                                             self.f_ref, self.ref_spectrum_abs,
@@ -1389,7 +1394,8 @@ class SpectralProcessor(object):
 
         # Smooth complex spectrum only after normalization
         if smoothing and smoothing>1:
-            self.norm_spectrum = self.smoothed_spectrum(self.f_norm,self.norm_spectrum,smoothing,order=4)
+            self.norm_spectrum = self.smoothed_spectrum(self.f_norm,self.norm_spectrum,
+                                                        smoothing,order=4) #High-order leveling (then de-leveling) required for accurate smoothing
 
         return self.f_norm, self.norm_spectrum_abs, self.norm_spectrum
 
@@ -1543,8 +1549,9 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                         ref_spectra, ref_BB_spectra,
                         apply_envelope=True, envelope_width=1,
                         level_phase=False, align_phase=True,
-                        phase_offset=0,smoothing=None, valid_thresh=.01,
-                        piecewise_flattening=0):
+                        phase_offset=0, smoothing=None, valid_thresh=.01,
+                        piecewise_flattening=0,
+                        zero_phase_interval=None):
 
     try:
 
@@ -1567,8 +1574,10 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                                      view_phase_alignment=False,
                                      recompute_reference=False) #`recompute_reference=False` saves us half our effort
 
+            # If we did align phase, we'll have all sorts of point-to-point baseline shifts in linescan,
+            # So applying leveling at high order than 2 so we include an overall offset
             if level_phase:
-                snorm = SP.level_phase(f, snorm, order=1, manual_offset=None, weighted=False)
+                snorm = SP.level_phase(f, snorm, order=2, manual_offset=None, weighted=False)
 
             elif piecewise_flattening:
                 phase = SP.get_phase(f, snorm, level_phase=False)
@@ -1577,13 +1586,9 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                 phase -= offset
                 snorm = snorm_abs * np.exp(1j * phase)
 
-            # Now finally apply manual offset
+            # Now finally get phase, with or without nonzero manual offset
             phase = SP.get_phase(f, snorm, level_phase=True,
-                                 order=0, manual_offset=phase_offset)  # Only level using the offset we apply
-
-            # If we did align phase, we'll have all sorts of point-to-point baseline shifts in linescan
-            if align_phase:
-                phase -= np.mean(phase)
+                                 order=0, manual_offset=phase_offset)  # Order 0 means only offset is used
 
             if fmutual is None:  fmutual = f
             else:
@@ -1601,6 +1606,19 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
         snorms_abs = np.array(snorms_abs)
         phases = np.array(phases)
 
+        #Try leveling phase across a particular range of energies
+        if level_phase and hasattr(zero_phase_interval, '__len__') \
+            and len(zero_phase_interval) >= 2:
+
+            fmin,fmax = np.min(zero_phase_interval), np.max(zero_phase_interval)
+            f0 = np.mean((fmin,fmax))
+            interval = (fmutual>fmin)*(fmutual<fmax)
+            if interval.any(): #Only do anything if interval turns out to have data
+                pvals = np.mean(phases[:,interval],axis=-1) #average phase per point inside freq interval
+                ptarget = np.mean(pvals)
+                pcorr  = fmutuals/f0 * (ptarget-pvals[:,np.newaxis])
+                phases += pcorr
+
         return np.array([fmutuals.real,
                          snorms_abs.real,
                          phases.real],dtype=np.float)
@@ -1611,3 +1629,20 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
             f.write(error_text)
 
         raise
+
+def save_data(path,data):
+
+    import pickle
+    with open(path,'wb') as f:
+        pickle.dump(data,f)
+
+    return 'Done'
+
+
+def load_data(path):
+
+    import pickle
+    with open(path, 'rb') as f:
+        data = pickle.load(f)
+
+    return data
