@@ -725,6 +725,8 @@ class SpectralProcessor(object):
     @staticmethod
     def get_intfg(f,scomplex):
 
+        assert scomplex.any(),'Input must not be empty!'
+
         faxis = np.append(-f[::-1], f) #We assume we have only positive frequencies, but need negative ones too
         s = np.append(np.conj(scomplex[::-1]), scomplex)
         s = num.Spectrum(AWA(s, axes=[faxis], axis_names=['X Frequency']))
@@ -740,13 +742,14 @@ class SpectralProcessor(object):
     def level_phase(cls,f, s, order=1, manual_offset=0, return_leveler=False,
                     weighted=True, subtract_baseline=False):
 
-        assert np.all(np.isfinite(s))
+        from scipy.linalg import LinAlgError
+        assert np.all(np.isfinite(s)) and len(f)==len(s)
 
-        if weighted: w = np.abs(s) ** 2
+        if s.any() and weighted: w = np.abs(s) ** 2
         else: w=None
 
-        leveler = 1
-        if order:
+        leveler = np.ones(s.shape,dtype=complex)
+        if order and s.any(): #If `s` is empty, we don't want to compute bogus interferogram
             #Begin by de-shifting interferogram
             x,intfg = cls.get_intfg(f,s)
             x0 = np.sum(x*intfg**2)/np.sum(intfg**2)
@@ -756,7 +759,8 @@ class SpectralProcessor(object):
             attempts=0; max_attempts=10
             while True:
                 p = np.unwrap(np.angle( s*leveler ))
-                m = list(np.polyfit(x=f, y=p, deg=order, w=w))
+                try: m = list(np.polyfit(x=f, y=p, deg=order, w=w))
+                except LinAlgError: break #Many reasons why this might fail out
                 if order == 1 and \
                     not subtract_baseline:  m[-1]=0 #no overall phase offsets, if we are restricting to physical offsets
                 pcorr = -np.polyval(m, f)
@@ -1088,39 +1092,6 @@ class SpectralProcessor(object):
         env_sets = []
         for i in range(Nspectra):
 
-            ##-------- Analyte spectrum components
-            f,sabs,sphase = spectra[Nrows * i:Nrows * i+3]
-            s = sabs * np.exp(1j * sphase)
-
-            # In case we have invalid entries (zeros), remove them
-            where_valid = np.isfinite(f) * (f > 0)
-            if not where_valid.any():
-                print('Spectrum at entry %i is inferred empty!' % i)
-                continue
-            f = f[where_valid]
-            s = s[where_valid]
-
-            # Establish some mutual frequency axis
-            if f0 is None: f0=f
-
-            # Envelope components and apply them
-            env_set = spectra_ref[Nrows * i + 4][:3]
-            if apply_envelope:
-                env = spectral_envelope(f0, *env_set,
-                                        expand_envelope = envelope_width)
-                env /= env.max()
-
-            # Touch up the spectrum in all the ways
-            # Smooth before applying envelope
-            if window:
-                s = self.windowed_spectrum(f, s, window=window)
-            if smoothing:
-                s = self.smoothed_spectrum(f, s,smoothing=smoothing)
-            s = self.interpolate_spectrum(s,f,f0)
-            if apply_envelope: s *= env
-
-            # We're done
-
             ##----- Reference spectrum components
             f_ref,sabs_ref,sphase_ref = spectra_ref[Nrows * i:Nrows * i+3]
             s_ref = sabs_ref * np.exp(1j * sphase_ref)
@@ -1128,10 +1099,20 @@ class SpectralProcessor(object):
             # In case we have invalid entries (zeros), remove them
             where_valid = np.isfinite(f_ref) * (f_ref > 0)
             if not where_valid.any():
-                print('Spectrum at entry %i is inferred empty!' % i)
+                print('Reference spectrum at entry %i is inferred empty!' % i)
                 continue
             f_ref = f_ref[where_valid]
             s_ref = s_ref[where_valid]
+
+            # Establish some mutual frequency axis
+            if f0 is None: f0=f_ref #In this way, even if analyte spectra are empty, we have a definite frequency axis
+
+            # Compute envelope
+            env_set = spectra_ref[Nrows * i + 4][:3]
+            if apply_envelope:
+                env = spectral_envelope(f0, *env_set,
+                                        expand_envelope = envelope_width)
+                env /= env.max()
 
             # Touch up the spectrum in all the ways
             # Smooth before applying envelope
@@ -1146,10 +1127,34 @@ class SpectralProcessor(object):
             if not BB_phase:
                 s_ref = np.abs(s_ref)
 
+            ##-------- Analyte spectrum components
+            f,sabs,sphase = spectra[Nrows * i:Nrows * i+3]
+            s = sabs * np.exp(1j * sphase)
+
+            # In case we have invalid entries (zeros), remove them
+            where_valid = np.isfinite(f) * (f > 0)
+            if not where_valid.any():
+                print('Analyte spectrum at entry %i is inferred empty!' % i)
+                continue
+            f = f[where_valid]
+            s = s[where_valid]
+
+            # Touch up the spectrum in all the ways
+            # Smooth before applying envelope
+            if window:
+                s = self.windowed_spectrum(f, s, window=window)
+            if smoothing:
+                s = self.smoothed_spectrum(f, s,smoothing=smoothing)
+            s = self.interpolate_spectrum(s,f,f0)
+            if apply_envelope: s *= env
+
             # We're done
             env_sets.append(env_set)
             ss.append(s)
             ss_ref.append(s_ref)
+
+        # If we didn't process any reference spectra (at least) then we have an error
+        if f0 is None: raise ValueError('All spectral data were supplied empty!')
 
         # Sort by center frequency
         fcenters = np.array([env_set[1] for env_set in env_sets])
@@ -1158,10 +1163,13 @@ class SpectralProcessor(object):
         ss_ref = [ss_ref[idx] for idx in ordering]
 
         #Determine global leveler that removes average x-coordinate of all interferograms
-        S = np.sum(ss,axis=0)
-        self.global_leveler = self.level_phase(f0,S,order=1,return_leveler=True)
-        ss = [s * self.global_leveler for s in ss]
+        if len(ss):
+            S = np.sum(ss,axis=0)
+            self.global_leveler = self.level_phase(f0,S,order=1,return_leveler=True)
+            ss = [s * self.global_leveler for s in ss]
+        else: self.global_leveler = np.ones(f0.shape) #In case there is no data to level
 
+        #Spectra could all be empty, though f0 will not be
         return f0, ss, ss_ref
 
     ###########
@@ -1258,6 +1266,11 @@ class SpectralProcessor(object):
             self.ref_frequencies = f0
             self.ref_leveler = self.global_leveler
 
+        if not len(spectra):
+            print('Analyte spectra were empty of data!  Returning spectra of zeros...')
+            s_empty = np.zeros(f0.shape,dtype=np.float)
+            return f0,s_empty,s_empty
+
         # Align phase only if commanded, store uncorrected version as `spectra0` for comparison
         if align_phase:
             print('Aligning phase...')
@@ -1345,22 +1358,7 @@ class SpectralProcessor(object):
         respective bright-beam spectra, and then normalizes these
         two BB-normalized spectra to each other."""
 
-        print('Processing sample spectra...')
-        self.f_sample,self.sample_spectrum_abs,self.sample_spectrum\
-                                            =self.process_spectrum(target='sample',
-                                                                   apply_envelope=apply_envelope,
-                                                                   envelope_width=envelope_width,
-                                                                   valid_thresh=valid_thresh,
-                                                                   smoothing=None,window=window,
-                                                                   align_phase=align_phase,
-                                                                   view_phase_alignment=view_phase_alignment,
-                                                                   BB_normalize=BB_normalize,BB_phase=BB_phase,
-                                                                   **kwargs)
-        #Smooth magnitude spectrum before normalization
-        if smoothing and smoothing>1:
-            self.sample_spectrum_abs = self.smoothed_spectrum(self.f_sample,self.sample_spectrum_abs,
-                                                              smoothing,order=1) #magnitude spectrum, no leveling required
-
+        #--- First get reference spectrum
         #See if we can get away with not recomputing reference spectrum
         try:
             if recompute_reference: raise AttributeError
@@ -1377,25 +1375,61 @@ class SpectralProcessor(object):
                                                                     view_phase_alignment=view_phase_alignment,
                                                                        BB_normalize=BB_normalize,BB_phase=BB_phase,
                                                                     **kwargs)
+
+            # `process_spectrum` can return zeros, if provided spectra were empty of data.
+            # That is not allowed to happen here.
+            assert self.ref_spectrum_abs.any(), 'Reference spectra must be non-empty!'
+
             #Smooth magnitude spectrum before normalization
             if smoothing and smoothing>1:
                 self.ref_spectrum_abs = self.smoothed_spectrum(self.f_ref,self.ref_spectrum_abs,
                                                                smoothing,order=1) #magnitude spectrum, no leveling required
 
+        #--- Now get sample spectrum
+        print('Processing sample spectra...')
+        self.f_sample,self.sample_spectrum_abs,self.sample_spectrum\
+                                            =self.process_spectrum(target='sample',
+                                                                   apply_envelope=apply_envelope,
+                                                                   envelope_width=envelope_width,
+                                                                   valid_thresh=valid_thresh,
+                                                                   smoothing=None,window=window,
+                                                                   align_phase=align_phase,
+                                                                   view_phase_alignment=view_phase_alignment,
+                                                                   BB_normalize=BB_normalize,BB_phase=BB_phase,
+                                                                   **kwargs)
+        #If sample spectrum is non-empty, do normalization
+        if not self.sample_spectrum_abs.any():
+            self.f_sample = self.f_ref
+            self.sample_spectrum_abs = np.zeros(self.f_ref.shape)
+            self.sample_spectrum = np.zeros(self.f_ref.shape)
+
+        # Smooth magnitude spectrum before normalization
+        if smoothing and smoothing > 1:
+            self.sample_spectrum_abs = self.smoothed_spectrum(self.f_sample, self.sample_spectrum_abs,
+                                                              smoothing,
+                                                              order=1)  # magnitude spectrum, no leveling required
+
         self.f_norm_abs, self.norm_spectrum_abs = self.normalize_spectrum(self.f_sample, self.sample_spectrum_abs,
-                                                                            self.f_ref, self.ref_spectrum_abs,
-                                                                             valid_thresh=valid_thresh)
+                                                                          self.f_ref, self.ref_spectrum_abs,
+                                                                          valid_thresh=valid_thresh)
         self.f_norm, self.norm_spectrum = self.normalize_spectrum(self.f_sample, self.sample_spectrum,
                                                                   self.f_ref, self.ref_spectrum,
                                                                   valid_thresh=valid_thresh)
 
         self.norm_spectrum_abs = self.interpolate_spectrum(self.norm_spectrum_abs,
-                                                           self.f_norm_abs,self.f_norm).real
+                                                           self.f_norm_abs, self.f_norm).real
 
         # Smooth complex spectrum only after normalization
-        if smoothing and smoothing>1:
-            self.norm_spectrum = self.smoothed_spectrum(self.f_norm,self.norm_spectrum,
-                                                        smoothing,order=4) #High-order leveling (then de-leveling) required for accurate smoothing
+        if smoothing and smoothing > 1:
+            self.norm_spectrum = self.smoothed_spectrum(self.f_norm, self.norm_spectrum,
+                                                        smoothing,
+                                                        order=4)  # High-order leveling (then de-leveling) required for accurate smoothing
+
+        """#If sample spectrum is empty (allowed), just return 0
+        else:
+            self.f_sample = self.f_norm = self.f_ref
+            self.sample_spectrum_abs = self.norm_spectrum_abs = np.zeros(self.f_ref.shape)
+            self.sample_spectrum = self.norm_spectrum = np.zeros(self.f_ref.shape)"""
 
         return self.f_norm, self.norm_spectrum_abs, self.norm_spectrum
 
@@ -1506,7 +1540,8 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                         apply_envelope=True, envelope_width=1,
                         level_phase=False, align_phase=True,
                         phase_offset=0,smoothing=None, valid_thresh=.01,
-                        piecewise_flattening=0):
+                        piecewise_flattening=0,
+                        zero_phase_interval=None):
 
     try:
         SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
@@ -1519,7 +1554,7 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                                 align_phase=align_phase,
                                 view_phase_alignment=False)
 
-        if level_phase: snorm = SP.level_phase(f,snorm,order=1,manual_offset=None,weighted=False)
+        if level_phase: snorm = SP.level_phase(f,snorm,order=1,manual_offset=None,weighted=True)
 
         elif piecewise_flattening:
             phase = SP.get_phase(f, snorm, level_phase=False)
@@ -1531,6 +1566,18 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
         #Now finally apply manual offset
         phase=SP.get_phase(f, snorm, level_phase=True,
                            order=0, manual_offset=phase_offset) #Only level using the offset we apply
+
+        # Try leveling phase across a particular range of energies
+        if level_phase and hasattr(zero_phase_interval, '__len__') \
+                and len(zero_phase_interval) >= 2:
+
+            fmin, fmax = np.min(zero_phase_interval), np.max(zero_phase_interval)
+            f0 = np.mean((fmin, fmax))
+            interval = (f > fmin) * (f < fmax)
+            if interval.any():  # Only do anything if interval turns out to have data
+                pval = np.mean(phase[interval])  # average phase inside freq interval
+                pcorr = f / f0 * (-pval) #This will zero by the average value inside interval
+                phase += pcorr
 
         return np.array([f,
                          snorm_abs.real,
@@ -1553,6 +1600,8 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                         piecewise_flattening=0,
                         zero_phase_interval=None):
 
+    global SP
+
     try:
 
         fmutual = None
@@ -1574,10 +1623,8 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                                      view_phase_alignment=False,
                                      recompute_reference=False) #`recompute_reference=False` saves us half our effort
 
-            # If we did align phase, we'll have all sorts of point-to-point baseline shifts in linescan,
-            # So applying leveling at high order than 2 so we include an overall offset
             if level_phase:
-                snorm = SP.level_phase(f, snorm, order=2, manual_offset=None, weighted=False)
+                snorm = SP.level_phase(f, snorm, order=1, manual_offset=None, weighted=False)
 
             elif piecewise_flattening:
                 phase = SP.get_phase(f, snorm, level_phase=False)
@@ -1614,9 +1661,8 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
             f0 = np.mean((fmin,fmax))
             interval = (fmutual>fmin)*(fmutual<fmax)
             if interval.any(): #Only do anything if interval turns out to have data
-                pvals = np.mean(phases[:,interval],axis=-1) #average phase per point inside freq interval
-                ptarget = np.mean(pvals)
-                pcorr  = fmutuals/f0 * (ptarget-pvals[:,np.newaxis])
+                pvals = np.mean(phases[:, interval], axis=-1)  # average phase per point inside freq interval
+                pcorr = fmutuals / f0 * (- pvals[:, np.newaxis]) #This will zero (pointwise) by the average value inside interval
                 phases += pcorr
 
         return np.array([fmutuals.real,
@@ -1632,6 +1678,8 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
 
 def save_data(path,data):
 
+    data=np.array(data) #Assume array data type for now
+
     import pickle
     with open(path,'wb') as f:
         pickle.dump(data,f)
@@ -1644,5 +1692,7 @@ def load_data(path):
     import pickle
     with open(path, 'rb') as f:
         data = pickle.load(f)
+
+    data=np.array(data) #Assume array data type for now
 
     return data
