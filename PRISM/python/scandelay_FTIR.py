@@ -787,8 +787,9 @@ class SpectralProcessor(object):
         p = np.unwrap(np.angle(s))
 
         #Remove as many factors of 2*pi so that greatest intensity region is closest to zero
-        pavg = np.sum(p*np.abs(s)**2) / np.sum(np.abs(s)**2)
-        p -= 2*np.pi * np.round(pavg/(2*np.pi))
+        if s.any():
+            pavg = np.sum(p*np.abs(s)**2) / np.sum(np.abs(s)**2)
+            p -= 2*np.pi * np.round(pavg/(2*np.pi))
 
         return p.real
 
@@ -1660,10 +1661,16 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
             fmin,fmax = np.min(zero_phase_interval), np.max(zero_phase_interval)
             f0 = np.mean((fmin,fmax))
             interval = (fmutual>fmin)*(fmutual<fmax)
+
             if interval.any(): #Only do anything if interval turns out to have data
-                pvals = np.mean(phases[:, interval], axis=-1)  # average phase per point inside freq interval
-                pcorr = fmutuals / f0 * (- pvals[:, np.newaxis]) #This will zero (pointwise) by the average value inside interval
-                phases += pcorr
+                for n,phase in enumerate(phases): #iterate over points
+                    js = np.arange(-2,3,1)
+                    js = js[np.newaxis,:] #Try leveling into different `2pi` regimes
+                    pval = np.mean(phase[interval])  # average phase inside freq interval
+                    pcorr = fmutual[:,np.newaxis] / f0 * (2*np.pi*js - pval) - 2*np.pi*js #This will make phase in interval equal to some multple of 2pi
+                    phase_options = phase[:,np.newaxis] + pcorr
+                    residuals = np.sum( (phase_options[interval])**2, axis=0) #Leave the `js` axis
+                    phases[n] = phase_options[:,np.argmin(residuals)]
 
         return np.array([fmutuals.real,
                          snorms_abs.real,
