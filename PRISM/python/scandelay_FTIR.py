@@ -709,7 +709,7 @@ class SpectralProcessor(object):
                                                                     expand_envelope=expand_envelope)
         f, s_abs_norm = cls.normalize_spectrum(f0, spectra_cal,
                                                f0, spectra_BB_cal,
-                                               valid_thresh=valid_thresh, abs=True)
+                                               valid_thresh=valid_thresh)
         d1 = np.gradient(s_abs_norm) / s_abs_norm
 
         return np.mean(np.abs(d1) ** (1 / 2))  # minimize first derivative
@@ -723,20 +723,19 @@ class SpectralProcessor(object):
         return np.exp(1j * f * p) * s
 
     @staticmethod
-    def get_intfg(f,scomplex):
+    def get_intfg(fs,scomplex):
 
         assert scomplex.any(),'Input must not be empty!'
 
-        faxis = np.append(-f[::-1], f) #We assume we have only positive frequencies, but need negative ones too
-        s = np.append(np.conj(scomplex[::-1]), scomplex)
-        s = num.Spectrum(AWA(s, axes=[faxis], axis_names=['X Frequency']))
+        fs_fft = np.fft.fftfreq(len(scomplex), d=1 / (2 * fs.max()))
+        s_fft = scomplex.interpolate_axis(fs_fft, axis=0, fill_value=0,
+                                          kind='linear', bounds_error=False)
 
-        ## Compute and window interferogram
-        intfg = s.get_inverse().real
-        x=intfg.axes[0]
-        intfg = np.array(intfg)
+        intfg = np.fft.ifft(s_fft)
+        Dx = 1 / np.diff(fs)[0]
+        xs = np.linspace(0, Dx, len(intfg))
 
-        return x,intfg
+        return xs,intfg
 
     @classmethod
     def level_phase(cls,f, s, order=1, manual_offset=0, return_leveler=False,
