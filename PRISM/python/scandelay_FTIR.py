@@ -726,10 +726,12 @@ class SpectralProcessor(object):
     def get_intfg(fs,scomplex):
 
         assert scomplex.any(),'Input must not be empty!'
+        interp=interp1d(x=fs,y=scomplex,
+                        axis=0, fill_value=0,
+                        kind='linear', bounds_error=False)
 
         fs_fft = np.fft.fftfreq(len(scomplex), d=1 / (2 * fs.max()))
-        s_fft = scomplex.interpolate_axis(fs_fft, axis=0, fill_value=0,
-                                          kind='linear', bounds_error=False)
+        s_fft = interp(fs_fft)
 
         intfg = np.fft.ifft(s_fft)
         Dx = 1 / np.diff(fs)[0]
