@@ -726,14 +726,20 @@ class SpectralProcessor(object):
     def get_intfg(fs,scomplex):
 
         assert scomplex.any(),'Input must not be empty!'
-        interp=interp1d(x=fs,y=scomplex,
-                        axis=0, fill_value=0,
-                        kind='linear', bounds_error=False)
 
-        fs_fft = np.fft.fftfreq(len(scomplex), d=1 / (2 * fs.max()))
+        # Stack negative frequencies, because we don't have them
+        fs_full = np.hstack( (-fs[::-1], [0], fs) ) #Include zero frequency
+        scomplex_full = np.hstack( (scomplex.conj()[::-1],
+                                    [0],
+                                    scomplex) )
+        interp=interp1d(x=fs_full,y=scomplex_full,
+                        axis=0, fill_value=0,
+                        kind='linear', bounds_error=False) #types beyond 'linear' type could give problematic extrapolations
+
+        fs_fft = np.fft.fftfreq(len(scomplex_full), d=1 / (2 * fs.max()) ) #Assert `fs` goes up to Nyquist, so that `d` is sampling interval
         s_fft = interp(fs_fft)
 
-        intfg = np.fft.ifft(s_fft)
+        intfg = np.fft.ifft(s_fft).real
         Dx = 1 / np.diff(fs)[0]
         xs = np.linspace(0, Dx, len(intfg))
 
@@ -754,6 +760,7 @@ class SpectralProcessor(object):
             #Begin by de-shifting interferogram
             x,intfg = cls.get_intfg(f,s)
             x0 = np.sum(x*intfg**2)/np.sum(intfg**2)
+            cls.x0 = x0
             leveler *= np.exp(2*np.pi*1j*f*x0) #plane waves are in a basis `exp(-1j*x...)`, so we are shifting by `-x0`
 
             #Loop until we can flatten the phase no further
@@ -1022,8 +1029,10 @@ class SpectralProcessor(object):
             phase = self.get_phase(f, s * leveler, manual_offset=0,
                                    level_phase=False)
             coincidence = (np.abs(s0) * np.abs(s)) ** coincidence_exponent
-            norm = np.sum(coincidence)
 
+            if not coincidence.any(): return s,0
+
+            norm = np.sum(coincidence)
             p = np.sum((phase0 - phase) * coincidence) / norm
 
             pdiff = p-p0
@@ -1062,7 +1071,7 @@ class SpectralProcessor(object):
 
             #When we hit the first, re-set our reference spectrum
             if i==0: spectrum_cmp=spectra[ind0]
-            else: spectrum_cmp = spectrum_aligned
+            else: spectrum_cmp = spectrum_cmp+spectrum_aligned
 
         assert total_count==len(spectra)
 
