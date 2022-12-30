@@ -74,11 +74,6 @@
 		<Item Name="PRISM_RasterScan.vi" Type="VI" URL="../PRISM_RasterScan.vi"/>
 		<Item Name="PRISM_RasterScan_BSC202.vi" Type="VI" URL="../PRISM_RasterScan_BSC202.vi"/>
 		<Item Name="python_test.vi" Type="VI" URL="../Diagnostic/python_test.vi"/>
-		<Item Name="ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi" Type="VI" URL="../ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi"/>
-		<Item Name="ScanDelay_FTIR_GetSpectrum_Aligning.vi" Type="VI" URL="../ScanDelay_FTIR_GetSpectrum_Aligning.vi"/>
-		<Item Name="ScanDelay_FTIR_InterferogramDAQmxTask.vi" Type="VI" URL="../ScanDelay_FTIR_InterferogramDAQmxTask.vi"/>
-		<Item Name="ScanDelay_FTIR_PointSpectroscopy.vi" Type="VI" URL="../ScanDelay_FTIR_PointSpectroscopy.vi"/>
-		<Item Name="ScanDelay_FTIR_LineScanSpectroscopy.vi" Type="VI" URL="../ScanDelay_FTIR_LineScanSpectroscopy.vi"/>
 		<Item Name="ScanDelayTrigger" Type="NI-DAQmx Channel">
 			<Property Name="ChanType" Type="Str">Digital Input</Property>
 			<Property Name="Descr" Type="Str"></Property>
@@ -105,9 +100,14 @@
 			<Property Name="PhysicalChanName" Type="Str">Dev1/ai1</Property>
 		</Item>
 		<Item Name="FlattenPages.vi" Type="VI" URL="../../Peripherals/FlattenPages.vi"/>
+		<Item Name="ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi" Type="VI" URL="../ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi"/>
+		<Item Name="ScanDelay_FTIR_GetSpectrum_Aligning.vi" Type="VI" URL="../ScanDelay_FTIR_GetSpectrum_Aligning.vi"/>
+		<Item Name="ScanDelay_FTIR_InterferogramDAQmxTask.vi" Type="VI" URL="../ScanDelay_FTIR_InterferogramDAQmxTask.vi"/>
+		<Item Name="ScanDelay_FTIR_PointSpectroscopy.vi" Type="VI" URL="../ScanDelay_FTIR_PointSpectroscopy.vi"/>
+		<Item Name="ScanDelay_FTIR_LineScanSpectroscopy.vi" Type="VI" URL="../ScanDelay_FTIR_LineScanSpectroscopy.vi"/>
+		<Item Name="LineScanRemoteControl.vi" Type="VI" URL="../LineScanRemoteControl.vi"/>
 		<Item Name="LineScanCounterAE.vi" Type="VI" URL="../LineScanCounterAE.vi"/>
 		<Item Name="Control_LineScanCounterAE.ctl" Type="VI" URL="../Control_LineScanCounterAE.ctl"/>
-		<Item Name="LineScanRemoteControl.vi" Type="VI" URL="../LineScanRemoteControl.vi"/>
 		<Item Name="SpectralProcessor.vi" Type="VI" URL="../SpectralProcessor.vi"/>
 		<Item Name="Control_SpectralProcessor_SettingsCluser.ctl" Type="VI" URL="../Control_SpectralProcessor_SettingsCluser.ctl"/>
 		<Item Name="Control_SpectralProcessor.ctl" Type="VI" URL="../Control_SpectralProcessor.ctl"/>
