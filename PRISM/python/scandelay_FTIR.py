@@ -858,6 +858,8 @@ class SpectralProcessor(object):
     def interpolate_spectrum(cls,s,f1,f2,order=1):
         #Regular interpolation of a spectrum, but first removing overall phase slope, which can be smeared by interpolation
 
+        if np.all(f1==f2): return s #No need for interpolation if frequencies are identical
+
         # Find overall phase slope
         leveler = cls.level_phase(f1,s,order=order,manual_offset=0,return_leveler=True)
 
@@ -918,7 +920,7 @@ class SpectralProcessor(object):
 
         spectra = np.array(spectra)
 
-        Nrows = 5
+        Nrows = cls.Nrows
 
         assert len(spectra) % Nrows == 0, 'Input spectra must come as stacked groups of %i row vectors' % Nrows
         Nspectra = np.max((len(spectra) // Nrows, 1))
@@ -962,12 +964,13 @@ class SpectralProcessor(object):
         spectrum_abs = cls.summed_spectrum(ss, abs=True)
         spectrum_phase = cls.get_phase(f0,
                                        cls.summed_spectrum(ss,abs=False),
-                                       level_phase=True)
+                                       level_phase=False) #We could add option for leveling phase
 
         return np.array([f0, spectrum_abs, spectrum_phase],dtype=np.float)
 
     window_order=1
 
+    # This is deprecated, no obvious way to make it both fast and reliable
     @classmethod
     def windowed_spectrum(cls,f,scomplex,window=np.blackman,window_order=None):
 
@@ -1478,7 +1481,7 @@ def heal_linescan(linescan):
             for j in range(Nspectra):
                 j1, j2 = j * Nrows, (j + 1) * Nrows
                 shere = healed_linescan[i][j1:j2]
-                
+
                 if not shere.any():
                     snext = healed_linescan[i + 1][j1:j2]
                     snextnext = healed_linescan[i + 2][j1:j2]
