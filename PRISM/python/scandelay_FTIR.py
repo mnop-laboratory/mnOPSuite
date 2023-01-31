@@ -906,6 +906,7 @@ class SpectralProcessor(object):
         spectrum = cls.interpolate_spectrum(spectrum,f_s,f_mutual,order=4)
         spectrum_ref = cls.interpolate_spectrum(spectrum_ref,f_r,f_mutual,order=4)
 
+        #Limit output to range where reference spectrum has weight
         thresh = valid_thresh * np.abs(spectrum_ref[np.isfinite(spectrum_ref)]).max()
         where_valid = np.abs(spectrum_ref) > thresh
         snorm = (spectrum / spectrum_ref)[where_valid]
@@ -1746,7 +1747,7 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                 for n,phase in enumerate(phases): #iterate over points
                     include = interval * (snorms_abs[n]>0) #disregard empty data points
                     if not include.any(): continue
-                    pval = np.mean(phase[include])  # average phase inside freq interval
+                    pval = np.mean(phase[include])  # average phase inside freq interval #@TODO: make this an amplitude-weighted phases
                     pcorr = fmutual[:,np.newaxis] / f0 * (2*np.pi*n2pis - pval) - 2*np.pi*n2pis #This will make phase in interval equal to some multple of 2pi
                     phase_options = phase[:,np.newaxis] + pcorr
                     residuals = np.sum( (phase_options[include])**2, axis=0) #Leave the `js` axis
