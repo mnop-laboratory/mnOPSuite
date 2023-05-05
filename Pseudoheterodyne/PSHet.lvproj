@@ -10,21 +10,18 @@
 		<Property Name="server.vi.callsEnabled" Type="Bool">true</Property>
 		<Property Name="server.vi.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="specify.custom.address" Type="Bool">false</Property>
+		<Item Name="Control_rotator.ctl" Type="VI" URL="/D/Dropbox/Members/MacDonald, Shane/Control_rotator.ctl"/>
+		<Item Name="park snom main.vi" Type="VI" URL="../../../MicronixScanning/park snom main.vi"/>
 		<Item Name="PSHet_DAQInAndOut.vi" Type="VI" URL="../PSHet_DAQInAndOut.vi"/>
 		<Item Name="PSHet_DAQInAndOut_control.ctl" Type="VI" URL="../PSHet_DAQInAndOut_control.ctl"/>
-		<Item Name="zi_OptimizeModulation.vi" Type="VI" URL="../zi_OptimizeModulation.vi"/>
+		<Item Name="PSHet_zi_OptimizeModulation.vi" Type="VI" URL="../PSHet_zi_OptimizeModulation.vi"/>
 		<Item Name="zi_OptimizeModulation_Control.ctl" Type="VI" URL="../zi_OptimizeModulation_Control.ctl"/>
 		<Item Name="Dependencies" Type="Dependencies">
-			<Item Name="instr.lib" Type="Folder">
-				<Item Name="ziCheckVersion.vi" Type="VI" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Public/Utility/ziCheckVersion.vi"/>
-				<Item Name="ziClose.vi" Type="VI" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Public/ziClose.vi"/>
-				<Item Name="ziGetValue.vi" Type="VI" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Public/Configure/ziGetValue.vi"/>
-				<Item Name="ziGetValueDouble.vi" Type="VI" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Public/Configure/ziGetValueDouble.vi"/>
-				<Item Name="ziOpen.vi" Type="VI" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Public/ziOpen.vi"/>
-				<Item Name="ziSetValue.vi" Type="VI" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Public/Configure/ziSetValue.vi"/>
-				<Item Name="ziSetValueDouble.vi" Type="VI" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Public/Configure/ziSetValueDouble.vi"/>
-			</Item>
 			<Item Name="vi.lib" Type="Folder">
+				<Item Name="Check Color Table Size.vi" Type="VI" URL="/&lt;vilib&gt;/picture/jpeg.llb/Check Color Table Size.vi"/>
+				<Item Name="Check Data Size.vi" Type="VI" URL="/&lt;vilib&gt;/picture/jpeg.llb/Check Data Size.vi"/>
+				<Item Name="Check File Permissions.vi" Type="VI" URL="/&lt;vilib&gt;/picture/jpeg.llb/Check File Permissions.vi"/>
+				<Item Name="Check Path.vi" Type="VI" URL="/&lt;vilib&gt;/picture/jpeg.llb/Check Path.vi"/>
 				<Item Name="Convert 1DWfm to DDT.vi" Type="VI" URL="/&lt;vilib&gt;/DAQmx/miscellaneous.llb/Convert 1DWfm to DDT.vi"/>
 				<Item Name="DAQmx Clear Task.vi" Type="VI" URL="/&lt;vilib&gt;/DAQmx/configure/task.llb/DAQmx Clear Task.vi"/>
 				<Item Name="DAQmx Control Task.vi" Type="VI" URL="/&lt;vilib&gt;/DAQmx/configure/task.llb/DAQmx Control Task.vi"/>
@@ -227,17 +224,20 @@
 				<Item Name="DAQmx Write (Raw 1D U16).vi" Type="VI" URL="/&lt;vilib&gt;/DAQmx/write.llb/DAQmx Write (Raw 1D U16).vi"/>
 				<Item Name="DAQmx Write (Raw 1D U32).vi" Type="VI" URL="/&lt;vilib&gt;/DAQmx/write.llb/DAQmx Write (Raw 1D U32).vi"/>
 				<Item Name="DAQmx Write.vi" Type="VI" URL="/&lt;vilib&gt;/DAQmx/write.llb/DAQmx Write.vi"/>
+				<Item Name="Directory of Top Level VI.vi" Type="VI" URL="/&lt;vilib&gt;/picture/jpeg.llb/Directory of Top Level VI.vi"/>
 				<Item Name="DTbl Digital Size.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/DTblOps.llb/DTbl Digital Size.vi"/>
 				<Item Name="DTbl Uncompress Digital.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/DTblOps.llb/DTbl Uncompress Digital.vi"/>
 				<Item Name="DWDT Uncompress Digital.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/DWDTOps.llb/DWDT Uncompress Digital.vi"/>
 				<Item Name="Dynamic To Waveform Array.vi" Type="VI" URL="/&lt;vilib&gt;/express/express shared/transition.llb/Dynamic To Waveform Array.vi"/>
+				<Item Name="Error Cluster From Error Code.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Error Cluster From Error Code.vi"/>
+				<Item Name="imagedata.ctl" Type="VI" URL="/&lt;vilib&gt;/picture/picture.llb/imagedata.ctl"/>
 				<Item Name="NI_AALBase.lvlib" Type="Library" URL="/&lt;vilib&gt;/Analysis/NI_AALBase.lvlib"/>
+				<Item Name="NI_AdvSigProcTSA.lvlib" Type="Library" URL="/&lt;vilib&gt;/addons/_Advanced Signal Processing/NI_AdvSigProcTSA.lvlib"/>
 				<Item Name="Number of Waveform Samples.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/WDTOps.llb/Number of Waveform Samples.vi"/>
 				<Item Name="sub Waveform Array To Dynamic.vi" Type="VI" URL="/&lt;vilib&gt;/DAQmx/miscellaneous.llb/sub Waveform Array To Dynamic.vi"/>
-				<Item Name="TSA Deviation and Variance (Array).vi" Type="VI" URL="/&lt;vilib&gt;/Addons/Time Series Analysis/Statistical Analysis.llb/TSA Deviation and Variance (Array).vi"/>
-				<Item Name="TSA Deviation and Variance.vi" Type="VI" URL="/&lt;vilib&gt;/Addons/Time Series Analysis/Statistical Analysis.llb/TSA Deviation and Variance.vi"/>
-				<Item Name="TSA Mean (Array).vi" Type="VI" URL="/&lt;vilib&gt;/Addons/Time Series Analysis/Statistical Analysis.llb/TSA Mean (Array).vi"/>
-				<Item Name="TSA Mean.vi" Type="VI" URL="/&lt;vilib&gt;/Addons/Time Series Analysis/Statistical Analysis.llb/TSA Mean.vi"/>
+				<Item Name="VISA Configure Serial Port" Type="VI" URL="/&lt;vilib&gt;/Instr/_visa.llb/VISA Configure Serial Port"/>
+				<Item Name="VISA Configure Serial Port (Instr).vi" Type="VI" URL="/&lt;vilib&gt;/Instr/_visa.llb/VISA Configure Serial Port (Instr).vi"/>
+				<Item Name="VISA Configure Serial Port (Serial Instr).vi" Type="VI" URL="/&lt;vilib&gt;/Instr/_visa.llb/VISA Configure Serial Port (Serial Instr).vi"/>
 				<Item Name="WDT Number of Waveform Samples CDB.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/WDTOps.llb/WDT Number of Waveform Samples CDB.vi"/>
 				<Item Name="WDT Number of Waveform Samples DBL.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/WDTOps.llb/WDT Number of Waveform Samples DBL.vi"/>
 				<Item Name="WDT Number of Waveform Samples EXT.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/WDTOps.llb/WDT Number of Waveform Samples EXT.vi"/>
@@ -245,11 +245,51 @@
 				<Item Name="WDT Number of Waveform Samples I16.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/WDTOps.llb/WDT Number of Waveform Samples I16.vi"/>
 				<Item Name="WDT Number of Waveform Samples I32.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/WDTOps.llb/WDT Number of Waveform Samples I32.vi"/>
 				<Item Name="WDT Number of Waveform Samples SGL.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/WDTOps.llb/WDT Number of Waveform Samples SGL.vi"/>
+				<Item Name="Write PNG File.vi" Type="VI" URL="/&lt;vilib&gt;/picture/png.llb/Write PNG File.vi"/>
 			</Item>
+			<Item Name="Acceleration mMc Edited.vi" Type="VI" URL="../../../MicronixScanning/Acceleration mMc Edited.vi"/>
+			<Item Name="Check Idle (non scan).vi" Type="VI" URL="../../../MicronixScanning/Check Idle (non scan).vi"/>
+			<Item Name="Check Idle.vi" Type="VI" URL="../../../MicronixScanning/Check Idle.vi"/>
+			<Item Name="COM read file.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/COM read file.vi"/>
+			<Item Name="COM write file.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/COM write file.vi"/>
+			<Item Name="Communication VISA mMc Edited.vi" Type="VI" URL="../../../MicronixScanning/Communication VISA mMc Edited.vi"/>
+			<Item Name="Communication VISA mMc.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/Communication VISA mMc.vi"/>
+			<Item Name="count line-feed char.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/count line-feed char.vi"/>
+			<Item Name="Deceleration mMc Edited.vi" Type="VI" URL="../../../MicronixScanning/Deceleration mMc Edited.vi"/>
+			<Item Name="Delay.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/Delay.vi"/>
+			<Item Name="Detect VISA communication port mMc.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/Detect VISA communication port mMc.vi"/>
+			<Item Name="Give Move Command.vi" Type="VI" URL="../../../MicronixScanning/Give Move Command.vi"/>
+			<Item Name="Initialize Axes.vi" Type="VI" URL="../../../MicronixScanning/Initialize Axes.vi"/>
+			<Item Name="Initialize DAQ Assistant.vi" Type="VI" URL="../../../MicronixScanning/Initialize DAQ Assistant.vi"/>
+			<Item Name="Initialize Soft Limits.vi" Type="VI" URL="../../../MicronixScanning/Initialize Soft Limits.vi"/>
+			<Item Name="Loop Control.vi" Type="VI" URL="../../../MicronixScanning/Loop Control.vi"/>
 			<Item Name="lvanlys.dll" Type="Document" URL="/&lt;resource&gt;/lvanlys.dll"/>
+			<Item Name="Max and Min Location.vi" Type="VI" URL="../../../MicronixScanning/Max and Min Location.vi"/>
+			<Item Name="Measure and Update Array.vi" Type="VI" URL="../../../MicronixScanning/Measure and Update Array.vi"/>
+			<Item Name="Measure Line Scan.vi" Type="VI" URL="../../../MicronixScanning/Measure Line Scan.vi"/>
+			<Item Name="mMc emulator.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/mMc emulator.vi"/>
+			<Item Name="mMc param - global.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/mMc param - global.vi"/>
+			<Item Name="Move abs mMc Edited.vi" Type="VI" URL="../../../MicronixScanning/Move abs mMc Edited.vi"/>
+			<Item Name="Move abs mMc.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/Move abs mMc.vi"/>
+			<Item Name="Move Negative Limit.vi" Type="VI" URL="../../../MicronixScanning/Move Negative Limit.vi"/>
+			<Item Name="Move rel mMc Edited.vi" Type="VI" URL="../../../MicronixScanning/Move rel mMc Edited.vi"/>
+			<Item Name="Move rel mMc.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/Move rel mMc.vi"/>
 			<Item Name="nilvaiu.dll" Type="Document" URL="nilvaiu.dll">
 				<Property Name="NI.PreserveRelativePath" Type="Bool">true</Property>
 			</Item>
+			<Item Name="Read position mMc Edited.vi" Type="VI" URL="../../../MicronixScanning/Read position mMc Edited.vi"/>
+			<Item Name="Read Positions.vi" Type="VI" URL="../../../MicronixScanning/Read Positions.vi"/>
+			<Item Name="Read status mMc Edited.vi" Type="VI" URL="../../../MicronixScanning/Read status mMc Edited.vi"/>
+			<Item Name="Read status mMc.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/Read status mMc.vi"/>
+			<Item Name="Set Loop Type.vi" Type="VI" URL="../../../MicronixScanning/Set Loop Type.vi"/>
+			<Item Name="Set Vel Accel Decel.vi" Type="VI" URL="../../../MicronixScanning/Set Vel Accel Decel.vi"/>
+			<Item Name="Time Left.vi" Type="VI" URL="../../../MicronixScanning/Time Left.vi"/>
+			<Item Name="Travel limit negative mMc.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/Travel limit negative mMc.vi"/>
+			<Item Name="Travel limit positive mMc.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/Travel limit positive mMc.vi"/>
+			<Item Name="Velocity mMc Edited.vi" Type="VI" URL="../../../MicronixScanning/Velocity mMc Edited.vi"/>
+			<Item Name="Wait for stop mMc Edited.vi" Type="VI" URL="../../../MicronixScanning/Wait for stop mMc Edited.vi"/>
+			<Item Name="Wait for stop.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/Wait for stop.vi"/>
+			<Item Name="Zero position mMc.vi" Type="VI" URL="../../../MicronixScanning/SubVIs/Zero position mMc.vi"/>
 		</Item>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>
