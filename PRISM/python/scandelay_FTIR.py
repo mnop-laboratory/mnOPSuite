@@ -1467,8 +1467,10 @@ def accumulate_spectra(spectra, apply_envelope=True, expand_envelope=1):
 
 def heal_linescan(linescan):
 
-    linescan = np.array(linescan)
+    linescan = np.array(linescan,dtype=float)
     Nrows = SpectralProcessor.Nrows
+
+    isempty = lambda arr: np.isclose(arr,0).all()
 
     import copy
     healed_linescan = copy.copy(linescan)
@@ -1483,19 +1485,37 @@ def heal_linescan(linescan):
                 j1, j2 = j * Nrows, (j + 1) * Nrows
                 shere = healed_linescan[i][j1:j2]
 
-                if not shere.any():
+                if isempty(shere):
+                    print('Spectrum at pixel %i, accumulation %i is empty!'%(i,j))
                     snext = healed_linescan[i + 1][j1:j2]
                     snextnext = healed_linescan[i + 2][j1:j2]
 
                     # Fill hole with data from next pixel, and fill next pixel with `next-nextnext` average
-                    if snext.any():
+                    if not isempty(snext):
+                        print("We're fixing it!")
                         healed_linescan[i][j1:j2] = snext  # Assume data for `here` landed at next pixel
-                        if snextnext.any():
+                        if not isempty(snextnext):
                             healed_linescan[i + 1][j1:j2] = (snext + snextnext) / 2  # Fill (false) next pixel spectrum with an average
-                    elif snextnext.any():
+                    elif not isempty(snextnext):
+                        print("We're fixing it!")
                         healed_linescan[i][j1:j2] = snextnext  # Assume data for `here` landed two pixels away
 
-    return healed_linescan
+    return np.array(healed_linescan,dtype=float)
+
+def heal_linescan_recursive(linescan):
+
+    linescan=np.array(linescan,dtype=float)
+
+    linescan_healed = linescan
+    linescan_healed_prev = np.zeros(linescan.shape)
+    iteration=1
+    while not np.isclose(linescan_healed, linescan_healed_prev).all():
+        print('Healing iteration %i...'%iteration)
+        linescan_healed_prev = linescan_healed
+        linescan_healed = heal_linescan(linescan_healed_prev)
+        iteration+=1
+
+    return np.array(linescan_healed,dtype=float)
 
 def BB_referenced_spectrum(spectra,spectra_BB,
                           apply_envelope=True, envelope_width=1,
@@ -1506,7 +1526,8 @@ def BB_referenced_spectrum(spectra,spectra_BB,
         SP=SpectralProcessor(spectra,spectra_BB,
                              spectra_BB,spectra_BB)
 
-        # `BB_normalize=False` is key, to use only the envelope from BB, but overall normalize spectra directly to BB
+        # `BB_normalize=False` is key, to compute only the envelope from BB,
+        # and then to normalize spectra directly to BB as though it were reference
         f, spectrum_abs, spectrum = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
                                      smoothing=smoothing,
                                      valid_thresh=valid_thresh,
@@ -1647,12 +1668,15 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                         phase_offset=0, smoothing=None, valid_thresh=.01,
                         piecewise_flattening=0,
                         zero_phase_interval=None,
-                        plug_holes=True):
+                        heal_linescan=False):
 
     global SP
 
     sample_linescan = np.array(sample_linescan)
     sample_BB_spectra = np.array(sample_BB_spectra)
+
+    if heal_linescan:  sample_linescan = heal_linescan_recursive(sample_linescan)
+
     try:
 
         fmutual = None
@@ -1660,25 +1684,6 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
         snorms_abs = []; phases=[]
         #Iterate through spatial pixels
         for i in range(len(sample_linescan)):
-
-            #--- Plug missing spectra if required
-            # Untested
-            if plug_holes and (SP is not None) \
-                and i <= len(sample_linescan)-3: #We need nonzero data from 'nextnext' and preferably also 'next' pixels
-                Nspectra = len(sample_linescan[i]) // SP.Nrows
-                for j in range(Nspectra):
-                    j1,j2=j*SP.Nrows,(j+1)*SP.Nrows
-                    here = sample_linescan[i][j1:j2]
-                    if not here.any():
-                        next = sample_linescan[i+1][j1:j2]
-                        nextnext = sample_linescan[i+2][j1:j2]
-                        # Fill hole with data from next pixel, and fill next pixel with `next-nextnext` average
-                        if next.any():
-                            sample_linescan[i][j1:j2] = next #Assume data for `here` landed at next pixel
-                            if nextnext.any():
-                                sample_linescan[i+1][j1:j2] = (next+nextnext)/2 #Fill (false) next pixel spectrum with an average
-                        elif nextnext.any():
-                            sample_linescan[i][j1:j2] = nextnext #Assume data for `here` landed two pixels away
 
             sample_spectra = sample_linescan[i]
 
@@ -1700,13 +1705,6 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
             #--- Do all the phase leveling
             if level_phase:
                 snorm = SP.level_phase(f, snorm, order=1, manual_offset=None, weighted=False)
-
-            elif piecewise_flattening:
-                phase = SP.get_phase(f, snorm, level_phase=False)
-                to_fit = phase
-                offset, params = numrec.PiecewiseLinearFit(f, to_fit, nbreakpoints=piecewise_flattening, error_exp=2)
-                phase -= offset
-                snorm = snorm_abs * np.exp(1j * phase)
 
             # Now finally get phase, with or without nonzero manual offset
             phase = SP.get_phase(f, snorm, level_phase=True,
@@ -1739,7 +1737,7 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
             f0 = np.mean((fmin,fmax))
             interval = (fmutual>fmin)*(fmutual<fmax)
 
-            N2pis = 6
+            N2pis = 20
             n2pis = np.arange(-N2pis, N2pis+1, 1)
             n2pis = n2pis[np.newaxis, :]  # Try leveling into different `2pi` regimes
 
@@ -1747,11 +1745,18 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                 for n,phase in enumerate(phases): #iterate over points
                     include = interval * (snorms_abs[n]>0) #disregard empty data points
                     if not include.any(): continue
-                    pval = np.mean(phase[include])  # average phase inside freq interval #@TODO: make this an amplitude-weighted phases
+                    pval = np.mean(phase[include])  # average phase inside freq interval #@TODO: make this amplitude-weighted phases?
                     pcorr = fmutual[:,np.newaxis] / f0 * (2*np.pi*n2pis - pval) - 2*np.pi*n2pis #This will make phase in interval equal to some multple of 2pi
                     phase_options = phase[:,np.newaxis] + pcorr
                     residuals = np.sum( (phase_options[include])**2, axis=0) #Leave the `js` axis
                     phases[n] = phase_options[:,np.argmin(residuals)]
+
+        # Piecewise leveling only makes sense as the final step
+        if piecewise_flattening:
+            for n, phase in enumerate(phases): #iterate over points
+                to_fit = phase
+                offset, params = numrec.PiecewiseLinearFit(f, to_fit, nbreakpoints=piecewise_flattening, error_exp=2)
+                phase -= offset
 
         return np.array([fmutuals.real,
                          snorms_abs.real,
