@@ -889,6 +889,25 @@ class SpectralProcessor(object):
         return spectrum
 
     @classmethod
+    def impose_threshold(cls,f_mutual,spectrum,spectrum_ref,valid_thresh=.01):
+
+        use_previous = (valid_thresh is None) and hasattr(cls,'thresholded_range')
+        if use_previous and len(cls.thresholded_range) == len(f_mutual):
+            thresholded_range = cls.thresholded_range
+        else:
+            thresh = valid_thresh * np.abs(spectrum_ref[np.isfinite(spectrum_ref)]).max()
+            thresholded_range = np.abs(spectrum_ref) >= thresh
+            thresh = valid_thresh * np.abs(spectrum[np.isfinite(spectrum)]).max()
+            thresholded_range *= np.abs(spectrum) >= thresh
+            cls.thresholded_range = thresholded_range
+
+        f_mutual = f_mutual[thresholded_range]
+        spectrum = spectrum[thresholded_range]
+        spectrum_ref = spectrum_ref[thresholded_range]
+
+        return f_mutual, spectrum, spectrum_ref
+
+    @classmethod
     def normalize_spectrum(cls, f_s, spectrum,
                            f_r, spectrum_ref,
                            valid_thresh=.01):
@@ -907,12 +926,9 @@ class SpectralProcessor(object):
         spectrum_ref = cls.interpolate_spectrum(spectrum_ref,f_r,f_mutual,order=4)
 
         #Limit output to range where reference & input spectra have weight above threshold
-        thresh = valid_thresh * np.abs(spectrum_ref[np.isfinite(spectrum_ref)]).max()
-        where_valid = np.abs(spectrum_ref) > thresh
-        thresh = valid_thresh * np.abs(spectrumf[np.isfinite(spectrum)]).max()
-        where_valid *= np.abs(spectrum) > thresh
-        snorm = (spectrum / spectrum_ref)[where_valid]
-        f_mutual = f_mutual[where_valid]
+        f_mutual,spectrum,spectrum_ref = cls.impose_threshold(f_mutual,spectrum,spectrum_ref,
+                                                              valid_thresh=valid_thresh)
+        snorm = (spectrum / spectrum_ref)
 
         return f_mutual, snorm
 
@@ -1347,13 +1363,12 @@ class SpectralProcessor(object):
             spectrum_BB_abs_summed = self.summed_spectrum(spectra_BB, abs=True)
 
             # BB phase will already be discarded unless earlier `BB_phase=True`
+            f, spectrum_abs = self.normalize_spectrum(f0, spectrum_abs_summed,
+                                                      f0, spectrum_BB_abs_summed,
+                                                        valid_thresh=valid_thresh)
             f, spectrum = self.normalize_spectrum(f0, spectrum_summed,
                                                   f0, spectrum_BB_summed,
-                                                  valid_thresh=valid_thresh)
-
-            f, spectrum_abs = self.normalize_spectrum(f0, spectrum_abs_summed,
-                                                  f0, spectrum_BB_abs_summed,
-                                                  valid_thresh=valid_thresh)
+                                                  valid_thresh=None) #Here we will use the previous threshold to get identical frequency channels
         else:
             spectrum_abs = self.summed_spectrum(spectra, abs=True)
             spectrum = self.summed_spectrum(spectra, abs=False)
@@ -1432,7 +1447,7 @@ class SpectralProcessor(object):
                                                                           valid_thresh=valid_thresh)
         self.f_norm, self.norm_spectrum = self.normalize_spectrum(self.f_sample, self.sample_spectrum,
                                                                   self.f_ref, self.ref_spectrum,
-                                                                  valid_thresh=valid_thresh)
+                                                                  valid_thresh=None) #re-use last thresholding
 
         self.norm_spectrum_abs = self.interpolate_spectrum(self.norm_spectrum_abs,
                                                            self.f_norm_abs, self.f_norm).real
@@ -1468,6 +1483,8 @@ def accumulate_spectra(spectra, apply_envelope=True, expand_envelope=1):
         raise
 
 def heal_linescan(linescan):
+
+    print('Healing linescan!')
 
     linescan = np.array(linescan,dtype=float)
     Nrows = SpectralProcessor.Nrows
@@ -1505,6 +1522,8 @@ def heal_linescan(linescan):
     return np.array(healed_linescan,dtype=float)
 
 def heal_linescan_recursive(linescan):
+
+    print('Recursively healing linescan!')
 
     linescan=np.array(linescan,dtype=float)
 
@@ -1753,7 +1772,7 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                         pval = np.mean(phase[include])  # average phase inside freq interval
                         pcorr = fmutual[:,np.newaxis] / f0 * (2*np.pi*n2pis - pval) - 2*np.pi*n2pis #This will make phase in interval equal to some multiple of 2pi
                         phase_options = phase[:,np.newaxis] + pcorr
-                        residuals = np.sum( np.diff(phase_options[include])**2, axis=0) #Minimize the average slope
+                        residuals = np.sum( (phase_options[include])**2, axis=0) #Minimize the average slope
                         phases[n] = phase_options[:,np.argmin(residuals)]
 
             # Piecewise leveling only makes sense as the final step
