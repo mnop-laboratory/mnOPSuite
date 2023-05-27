@@ -891,14 +891,15 @@ class SpectralProcessor(object):
     @classmethod
     def impose_threshold(cls,f_mutual,spectrum,spectrum_ref,valid_thresh=.01):
 
-        use_previous = (valid_thresh is None) and hasattr(cls,'thresholded_range')
+        use_previous = (valid_thresh is 'last') and hasattr(cls,'thresholded_range')
         if use_previous and len(cls.thresholded_range) == len(f_mutual):
             thresholded_range = cls.thresholded_range
         else:
             thresh = valid_thresh * np.abs(spectrum_ref[np.isfinite(spectrum_ref)]).max()
             thresholded_range = np.abs(spectrum_ref) >= thresh
-            thresh = valid_thresh * np.abs(spectrum[np.isfinite(spectrum)]).max()
-            thresholded_range *= np.abs(spectrum) >= thresh
+            # We do not want to threshold based and sample spectrum values - presume that even zeros are valid data
+            #thresh = valid_thresh * np.abs(spectrum[np.isfinite(spectrum)]).max()
+            #thresholded_range *= np.abs(spectrum) >= thresh
             cls.thresholded_range = thresholded_range
 
         f_mutual = f_mutual[thresholded_range]
@@ -1368,7 +1369,7 @@ class SpectralProcessor(object):
                                                         valid_thresh=valid_thresh)
             f, spectrum = self.normalize_spectrum(f0, spectrum_summed,
                                                   f0, spectrum_BB_summed,
-                                                  valid_thresh=None) #Here we will use the previous threshold to get identical frequency channels
+                                                  valid_thresh='last') #Here we will use the previous threshold to get identical frequency channels
         else:
             spectrum_abs = self.summed_spectrum(spectra, abs=True)
             spectrum = self.summed_spectrum(spectra, abs=False)
@@ -1447,7 +1448,7 @@ class SpectralProcessor(object):
                                                                           valid_thresh=valid_thresh)
         self.f_norm, self.norm_spectrum = self.normalize_spectrum(self.f_sample, self.sample_spectrum,
                                                                   self.f_ref, self.ref_spectrum,
-                                                                  valid_thresh=None) #re-use last thresholding
+                                                                  valid_thresh='last') #re-use last thresholding
 
         self.norm_spectrum_abs = self.interpolate_spectrum(self.norm_spectrum_abs,
                                                            self.f_norm_abs, self.f_norm).real
