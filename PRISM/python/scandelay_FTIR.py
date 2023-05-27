@@ -906,9 +906,11 @@ class SpectralProcessor(object):
         spectrum = cls.interpolate_spectrum(spectrum,f_s,f_mutual,order=4)
         spectrum_ref = cls.interpolate_spectrum(spectrum_ref,f_r,f_mutual,order=4)
 
-        #Limit output to range where reference spectrum has weight
+        #Limit output to range where reference & input spectra have weight above threshold
         thresh = valid_thresh * np.abs(spectrum_ref[np.isfinite(spectrum_ref)]).max()
         where_valid = np.abs(spectrum_ref) > thresh
+        thresh = valid_thresh * np.abs(spectrumf[np.isfinite(spectrum)]).max()
+        where_valid *= np.abs(spectrum) > thresh
         snorm = (spectrum / spectrum_ref)[where_valid]
         f_mutual = f_mutual[where_valid]
 
@@ -1728,35 +1730,38 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
         phases = np.array(phases)
 
         #--- Phase leveling
-        # Set phase within some frequency interval to zero,
-        #  optimizing for flatness up to several factors of 2pi
-        if level_phase and hasattr(zero_phase_interval, '__len__') \
-            and len(zero_phase_interval) >= 2:
+        if level_phase:
 
-            fmin,fmax = np.min(zero_phase_interval), np.max(zero_phase_interval)
-            f0 = np.mean((fmin,fmax))
-            interval = (fmutual>fmin)*(fmutual<fmax)
+            # Set phase within some frequency interval to zero,
+            #  optimizing for flatness up to an arbitrary factor of 2pi
+            #  Which factor of 2pi is best?  Whichever minimizes the flatness residual
+            if hasattr(zero_phase_interval, '__len__') \
+                 and len(zero_phase_interval) >= 2:
 
-            N2pis = 20
-            n2pis = np.arange(-N2pis, N2pis+1, 1)
-            n2pis = n2pis[np.newaxis, :]  # Try leveling into different `2pi` regimes
+                fmin,fmax = np.min(zero_phase_interval), np.max(zero_phase_interval)
+                f0 = np.mean((fmin,fmax))
+                interval = (fmutual>fmin)*(fmutual<fmax)
 
-            if interval.any(): #Only do anything if interval turns out to have data
-                for n,phase in enumerate(phases): #iterate over points
-                    include = interval * (snorms_abs[n]>0) #disregard empty data points
-                    if not include.any(): continue
-                    pval = np.mean(phase[include])  # average phase inside freq interval #@TODO: make this amplitude-weighted phases?
-                    pcorr = fmutual[:,np.newaxis] / f0 * (2*np.pi*n2pis - pval) - 2*np.pi*n2pis #This will make phase in interval equal to some multple of 2pi
-                    phase_options = phase[:,np.newaxis] + pcorr
-                    residuals = np.sum( (phase_options[include])**2, axis=0) #Leave the `js` axis
-                    phases[n] = phase_options[:,np.argmin(residuals)]
+                N2pis = 100
+                n2pis = np.arange(-N2pis, N2pis+1, 1)
+                n2pis = n2pis[np.newaxis, :]  # Try leveling into different `2pi` regimes
 
-        # Piecewise leveling only makes sense as the final step
-        if piecewise_flattening:
-            for n, phase in enumerate(phases): #iterate over points
-                to_fit = phase
-                offset, params = numrec.PiecewiseLinearFit(f, to_fit, nbreakpoints=piecewise_flattening, error_exp=2)
-                phase -= offset
+                if interval.any(): #Only do anything if interval turns out to have data
+                    for n,phase in enumerate(phases): #iterate over points
+                        include = interval * (~np.isclose(snorms_abs[n],0)) #disregard empty data points
+                        if not include.any(): continue
+                        pval = np.mean(phase[include])  # average phase inside freq interval
+                        pcorr = fmutual[:,np.newaxis] / f0 * (2*np.pi*n2pis - pval) - 2*np.pi*n2pis #This will make phase in interval equal to some multiple of 2pi
+                        phase_options = phase[:,np.newaxis] + pcorr
+                        residuals = np.sum( np.diff(phase_options[include])**2, axis=0) #Minimize the average slope
+                        phases[n] = phase_options[:,np.argmin(residuals)]
+
+            # Piecewise leveling only makes sense as the final step
+            if piecewise_flattening:
+                for n, phase in enumerate(phases): #iterate over points
+                    to_fit = phase
+                    offset, params = numrec.PiecewiseLinearFit(fmutual, to_fit, nbreakpoints=piecewise_flattening, error_exp=2)
+                    phase -= offset
 
         return np.array([fmutuals.real,
                          snorms_abs.real,

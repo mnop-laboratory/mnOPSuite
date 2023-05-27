@@ -1,6 +1,7 @@
 ﻿<?xml version='1.0' encoding='UTF-8'?>
 <Project Type="Project" LVVersion="22308000">
 	<Item Name="My Computer" Type="My Computer">
+		<Property Name="NI.SortType" Type="Int">3</Property>
 		<Property Name="server.app.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="server.control.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="server.tcp.enabled" Type="Bool">false</Property>
@@ -14,8 +15,8 @@
 		<Item Name="park snom main.vi" Type="VI" URL="../../../MicronixScanning/park snom main.vi"/>
 		<Item Name="PSHet_DAQInAndOut.vi" Type="VI" URL="../PSHet_DAQInAndOut.vi"/>
 		<Item Name="PSHet_DAQInAndOut_control.ctl" Type="VI" URL="../PSHet_DAQInAndOut_control.ctl"/>
-		<Item Name="PSHet_zi_OptimizeModulation.vi" Type="VI" URL="../PSHet_zi_OptimizeModulation.vi"/>
 		<Item Name="zi_OptimizeModulation_Control.ctl" Type="VI" URL="../zi_OptimizeModulation_Control.ctl"/>
+		<Item Name="PSHet_zi_OptimizeModulation.vi" Type="VI" URL="../PSHet_zi_OptimizeModulation.vi"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="instr.lib" Type="Folder">
 				<Item Name="Zurich Instruments LabOne.lvlib" Type="Library" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Zurich Instruments LabOne.lvlib"/>
