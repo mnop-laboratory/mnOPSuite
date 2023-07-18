@@ -1707,6 +1707,7 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
         #Iterate through spatial pixels
         for i in range(len(sample_linescan)):
 
+            print('Processing linescan pixel %i of %i...'%(i+1,len(sample_linescan)))
             sample_spectra = sample_linescan[i]
 
             #--- Compute normalized spectrum at this pixel
@@ -1728,7 +1729,7 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
             if level_phase:
                 snorm = SP.level_phase(f, snorm, order=1, manual_offset=None, weighted=False)
 
-            # Now finally get phase, with or without nonzero manual offset
+            # Now get phase
             phase = SP.get_phase(f, snorm, level_phase=True,
                                  order=0, manual_offset=phase_offset)  # Order 0 means only offset is used
 
@@ -1782,6 +1783,12 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                     to_fit = phase
                     offset, params = numrec.PiecewiseLinearFit(fmutual, to_fit, nbreakpoints=piecewise_flattening, error_exp=2)
                     phase -= offset
+
+            # Finally restore the phase offset
+            if phase_offset:
+                f0=np.mean(fmutual)
+                for n, phase in enumerate(phases): #iterate over points
+                    phase += offset * fmutual/f0
 
         return np.array([fmutuals.real,
                          snorms_abs.real,
