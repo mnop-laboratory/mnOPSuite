@@ -1060,7 +1060,8 @@ class SpectralProcessor(object):
 
             pdiff = p-p0
             p = p - np.round(pdiff/(2*np.pi))*2*np.pi #Add as many factors of 2*pi as minimizes `pdiff`
-            # We are assuming that a physical shift the spectrum of order 2*pi is unlikely!
+            # We are assuming that a physical shift of the spectrum of order 2*pi is unlikely,
+            # otherwise, any attempt match adjacent phase spectra will be hopeless anyway!
 
             fcenter = np.sum(f * coincidence) / norm
 
@@ -1385,6 +1386,7 @@ class SpectralProcessor(object):
                  valid_thresh=.01,
                  smoothing=None,window=None,
                  view_phase_alignment=False,
+                 view_phase_alignment_leveling=6,
                  BB_normalize=True,BB_phase=False,
                  recompute_reference=True,
                  **kwargs):
@@ -1407,6 +1409,7 @@ class SpectralProcessor(object):
                                                                     smoothing=None,window=window,
                                                                     align_phase=align_phase,
                                                                     view_phase_alignment=view_phase_alignment,
+                                                                    view_phase_alignment_leveling=view_phase_alignment_leveling,
                                                                        BB_normalize=BB_normalize,BB_phase=BB_phase,
                                                                     **kwargs)
 
@@ -1429,6 +1432,7 @@ class SpectralProcessor(object):
                                                                    smoothing=None,window=window,
                                                                    align_phase=align_phase,
                                                                    view_phase_alignment=view_phase_alignment,
+                                                                   view_phase_alignment_leveling=view_phase_alignment_leveling,
                                                                    BB_normalize=BB_normalize,BB_phase=BB_phase,
                                                                    **kwargs)
         #If sample spectrum is non-empty, do normalization
@@ -1483,6 +1487,36 @@ def accumulate_spectra(spectra, apply_envelope=True, expand_envelope=1):
 
         raise
 
+def average_spectrum_block(specblock1,specblock2):
+
+    #unpack spectrum blocks according to our known organization
+    f1,sabs1,p1,e1,eparams1 = specblock1
+    s1 = sabs1*np.exp(1j*p1)
+    f2,sabs2,p2,e2,eparams2 = specblock2
+    s2 = sabs2*np.exp(1j*p2)
+
+    # In the oddball case that frequency axes are different, interpolate the former to the latter
+    f=f2
+    if not np.all(f1==f):
+        s1 = SpectralProcessor.interpolate_spectrum(s1,f1,f)
+        e1 = SpectralProcessor.interpolate_spectrum(e1,f1,f)
+        eparams1 = eparams1[eparams1!=0]
+        eparams1 = np.append(eparams1, [0]*(len(f)-len(eparams1))) #make sure envelope parameters have right size for stacking
+
+    leveler1 = SpectralProcessor.level_phase(f, s1*e1, order=1, manual_offset=0, return_leveler=True,
+                                              weighted=True, subtract_baseline=False) #consider the enveloped spectrum when determining how to level phase
+    leveler2 = SpectralProcessor.level_phase(f, s2*e2, order=1, manual_offset=0, return_leveler=True,
+                                              weighted=True, subtract_baseline=False)
+
+    #Sum the leveled spectra, then add back the average slope
+    savg = (s1*leveler1 + s2*leveler2)/2
+    sloper = (1/leveler1 + 1/leveler2)/2 #It is not easy to come up with an average leveler, but this one is tested to work (under not outrageous circumstances)
+    pavg = np.angle(savg*sloper)
+
+    sabsavg = np.sqrt(np.abs(s1)**2+np.abs(s2)**2)/np.sqrt(2)
+
+    return np.array([f,sabsavg,pavg,e1,eparams1])
+
 def heal_linescan(linescan):
 
     print('Healing linescan!')
@@ -1512,12 +1546,14 @@ def heal_linescan(linescan):
 
                     # Fill hole with data from next pixel, and fill next pixel with `next-nextnext` average
                     if not isempty(snext):
-                        print("We're fixing it!")
+                        print("We're taking data from pixel %i!"%(i+1))
                         healed_linescan[i][j1:j2] = snext  # Assume data for `here` landed at next pixel
                         if not isempty(snextnext):
-                            healed_linescan[i + 1][j1:j2] = (snext + snextnext) / 2  # Fill (false) next pixel spectrum with an average
+                            print("And we're filling in pixel %i with an average of %i and %i!"%(i+1,i+1,i+2))
+                            healed_linescan[i + 1][j1:j2] = average_spectrum_block(snext,snextnext) # Fill (false) next pixel spectrum with an average
+                            #healed_linescan[i + 1][j1:j2] = (snext + snextnext) / 2  # Fill (false) next pixel spectrum with an average
                     elif not isempty(snextnext):
-                        print("We're fixing it!")
+                        print("We're taking data from pixel %i!"%(i+2))
                         healed_linescan[i][j1:j2] = snextnext  # Assume data for `here` landed two pixels away
 
     return np.array(healed_linescan,dtype=float)
@@ -1788,7 +1824,7 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
             if phase_offset:
                 f0=np.mean(fmutual)
                 for n, phase in enumerate(phases): #iterate over points
-                    phase += offset * fmutual/f0
+                    phase += phase_offset * fmutual/f0
 
         return np.array([fmutuals.real,
                          snorms_abs.real,
