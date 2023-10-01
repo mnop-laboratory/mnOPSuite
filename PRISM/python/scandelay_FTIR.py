@@ -1018,7 +1018,7 @@ class SpectralProcessor(object):
         Pdesired = np.sum(np.abs(scomplex)**2)
         sout *= np.sqrt( Pdesired/Pactual )
 
-        return np.array(sout,dtype=np.complex)
+        return np.array(sout,dtype=complex)
 
     @classmethod
     def smoothed_spectrum(cls,f,scomplex,smoothing=4,order=2):
@@ -1304,7 +1304,7 @@ class SpectralProcessor(object):
 
         if not len(spectra):
             print('Analyte spectra were empty of data!  Returning spectra of zeros...')
-            s_empty = np.zeros(f0.shape,dtype=np.float)
+            s_empty = np.zeros(f0.shape,dtype=float)
             return f0,s_empty,s_empty
 
         # Align phase only if commanded, store uncorrected version as `spectra0` for comparison
@@ -1510,6 +1510,8 @@ def average_spectrum_block(specblock1,specblock2):
 
     #Sum the leveled spectra, then add back the average slope
     savg = (s1*leveler1 + s2*leveler2)/2
+    #avg_leveler = np.sqrt(leveler1*leveler2) #This method of averaging levelers has a "quadrant ambiguity"
+    #sloper = 1/avg_leveler
     sloper = (1/leveler1 + 1/leveler2)/2 #It is not easy to come up with an average leveler, but this one is tested to work (under not outrageous circumstances)
     pavg = np.angle(savg*sloper)
 
@@ -1532,10 +1534,11 @@ def heal_linescan(linescan):
     for i in range(len(healed_linescan)):
 
         # We need nonzero data from 'nextnext' and preferably also 'next' pixels
+        # So we cannot conceivably heal the last two pixels of data, sadly!
         if i <= len(healed_linescan) - 3:
             Nspectra = len(healed_linescan[i]) // Nrows
 
-            for j in range(Nspectra):
+            for j in range(Nspectra): #Iterate over accumulations aat this pixel
                 j1, j2 = j * Nrows, (j + 1) * Nrows
                 shere = healed_linescan[i][j1:j2]
 
@@ -1598,7 +1601,7 @@ def BB_referenced_spectrum(spectra,spectra_BB,
 
         return np.array([f,
                          spectrum_abs.real,
-                         phase.real],dtype=np.float)
+                         phase.real],dtype=float)
     except:
         error_text = str(traceback.format_exc())
         error_file = os.path.join(diagnostic_dir,'BB_referenced_spectrum.err')
@@ -1653,7 +1656,7 @@ def BB_referenced_linescan(linescan,spectra_BB,
 
         return np.array([fmutuals.real,
                          spectra_abs.real,
-                         phases.real],dtype=np.float)
+                         phases.real],dtype=float)
     except:
         error_text = str(traceback.format_exc())
         error_file = os.path.join(diagnostic_dir,'BB_referenced_linescan.err')
@@ -1708,7 +1711,7 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
 
         return np.array([f,
                          snorm_abs.real,
-                         phase.real], dtype=np.float)
+                         phase.real], dtype=float)
 
     except:
 
@@ -1828,7 +1831,7 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
 
         return np.array([fmutuals.real,
                          snorms_abs.real,
-                         phases.real],dtype=np.float)
+                         phases.real],dtype=float)
     except:
         error_text = str(traceback.format_exc())
         error_file = os.path.join(diagnostic_dir,'normalized_linescan.err')
