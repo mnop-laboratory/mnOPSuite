@@ -11,6 +11,9 @@
 		<Property Name="server.vi.callsEnabled" Type="Bool">true</Property>
 		<Property Name="server.vi.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="specify.custom.address" Type="Bool">false</Property>
+		<Item Name="PRISM(Ulate_Edition) Folder" Type="Folder" URL="../PRISM(Ulate_Edition) Folder">
+			<Property Name="NI.DISK" Type="Bool">true</Property>
+		</Item>
 		<Item Name="Control_GetSpectrum_BBnorm.ctl" Type="VI" URL="../Control_GetSpectrum_BBnorm.ctl"/>
 		<Item Name="DAQ Assistant_0" Type="NI-DAQmx Task">
 			<Property Name="\0\AI.Max" Type="Str">10</Property>
@@ -105,7 +108,7 @@
 		<Item Name="ScanDelay_FTIR_InterferogramDAQmxTask.vi" Type="VI" URL="../ScanDelay_FTIR_InterferogramDAQmxTask.vi"/>
 		<Item Name="ScanDelay_FTIR_PointSpectroscopy.vi" Type="VI" URL="../ScanDelay_FTIR_PointSpectroscopy.vi"/>
 		<Item Name="ScanDelay_FTIR_LineScanSpectroscopy.vi" Type="VI" URL="../ScanDelay_FTIR_LineScanSpectroscopy.vi"/>
-		<Item Name="LineScanRemoteControl.vi" Type="VI" URL="/D/Dropbox/Software/PRISM/LineScanRemoteControl.vi"/>
+		<Item Name="LineScanRemoteControl.vi" Type="VI" URL="../LineScanRemoteControl.vi"/>
 		<Item Name="LineScanRemoteControl_withRotator.vi" Type="VI" URL="../LineScanRemoteControl_withRotator.vi"/>
 		<Item Name="LineScanCounterAE.vi" Type="VI" URL="../LineScanCounterAE.vi"/>
 		<Item Name="Control_LineScanCounterAE.ctl" Type="VI" URL="../Control_LineScanCounterAE.ctl"/>
@@ -116,6 +119,7 @@
 		<Item Name="Control_PRISMRasterScan_ProtocolsLoop.ctl" Type="VI" URL="../Control_PRISMRasterScan_ProtocolsLoop.ctl"/>
 		<Item Name="Control_LineScanRemoteControl.ctl" Type="VI" URL="../Control_LineScanRemoteControl.ctl"/>
 		<Item Name="PSHet_zi_OptimizeModulation(MokuGO).vi" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/PSHet_zi_OptimizeModulation(MokuGO).vi"/>
+		<Item Name="BenchtopScanSandbox.vi" Type="VI" URL="/D/Dropbox/Software/LabVIEW/PRISM Scanning/PRISM Folder/BenchtopScanSandbox.vi"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="vi.lib" Type="Folder">
 				<Item Name="Check Color Table Size.vi" Type="VI" URL="/&lt;vilib&gt;/picture/jpeg.llb/Check Color Table Size.vi"/>
@@ -400,6 +404,7 @@
 				<Item Name="ex_SetAllExpressAttribs.vi" Type="VI" URL="/&lt;vilib&gt;/express/express shared/transition.llb/ex_SetAllExpressAttribs.vi"/>
 				<Item Name="Waveform Array To Dynamic.vi" Type="VI" URL="/&lt;vilib&gt;/express/express shared/transition.llb/Waveform Array To Dynamic.vi"/>
 				<Item Name="ex_CorrectErrorChain.vi" Type="VI" URL="/&lt;vilib&gt;/express/express shared/ex_CorrectErrorChain.vi"/>
+				<Item Name="NI_AALPro.lvlib" Type="Library" URL="/&lt;vilib&gt;/Analysis/NI_AALPro.lvlib"/>
 			</Item>
 			<Item Name="Control_GetSpectrum_Aligning.ctl" Type="VI" URL="../Control_GetSpectrum_Aligning.ctl"/>
 			<Item Name="Control_GetSpectrum_LineScanSpectroscopy.ctl" Type="VI" URL="../Control_GetSpectrum_LineScanSpectroscopy.ctl"/>
@@ -416,6 +421,8 @@
 			<Item Name="ElliptecRotationAE.vi" Type="VI" URL="../../Peripherals/ElliptecRotationAE.vi"/>
 			<Item Name="PSHet_DAQInAndOut_control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Dropbox/Software/LabVIEW/Pseudoheterodyne/PSHet_DAQInAndOut_control.ctl"/>
 			<Item Name="zi_OptimizeModulation_Control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Dropbox/Software/LabVIEW/Pseudoheterodyne/zi_OptimizeModulation_Control.ctl"/>
+			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="../../../../../../mnOP.Laboratory/Desktop/PRISM Scanning/Thorlabs.MotionControl.Controls.dll"/>
+			<Item Name="DAQActionEngine2.vi" Type="VI" URL="../PRISM(Ulate_Edition) Folder/DAQActionEngine2.vi"/>
 		</Item>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>

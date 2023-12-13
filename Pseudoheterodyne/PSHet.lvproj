@@ -11,7 +11,6 @@
 		<Property Name="server.vi.callsEnabled" Type="Bool">true</Property>
 		<Property Name="server.vi.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="specify.custom.address" Type="Bool">false</Property>
-		<Item Name="Control_rotator.ctl" Type="VI" URL="/D/Dropbox/Members/MacDonald, Shane/Control_rotator.ctl"/>
 		<Item Name="park snom main.vi" Type="VI" URL="../../../MicronixScanning/park snom main.vi"/>
 		<Item Name="PSHet_DAQInAndOut.vi" Type="VI" URL="../PSHet_DAQInAndOut.vi"/>
 		<Item Name="PSHet_DAQInAndOut_control.ctl" Type="VI" URL="../PSHet_DAQInAndOut_control.ctl"/>
