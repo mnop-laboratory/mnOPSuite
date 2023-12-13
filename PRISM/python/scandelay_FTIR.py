@@ -537,22 +537,19 @@ def spectral_envelope(f,A,f0,df,expand_envelope=1):
 
     return A*e #maximum value will always be `A`
 
-def fit_envelope(f,sabs,fmin=400,fmax=3500):
+def fit_envelope(f,sabs):
 
     global result
-    sub=(f>=fmin)*(f<=fmax)
-    fsub=f[sub]
-    sabssub=sabs[sub]
-    ind=np.argmax(sabssub)
-    A=sabssub[ind]
-    f0 = fsub[ind]
+    ind=np.argmax(sabs)
+    A=sabs[ind]
+    f0 = f[ind]
     df = f0/10
     x0=np.array([A,f0,df])
 
     def to_minimize(x):
 
         A,f0,df=x
-        delta = sabssub-spectral_envelope(fsub,A,f0,df,
+        delta = sabs-spectral_envelope(f,A,f0,df,
                                           expand_envelope=1)
         return delta
 
@@ -563,37 +560,45 @@ def fit_envelope(f,sabs,fmin=400,fmax=3500):
 
     return envelope,envelope_params
 
-def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=3000):
+def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=3000,window=True,convert_to_wn=True):
 
     v,t=np.array(a)
-    c=3e8 #speed of light in m/s
     t=t-tsubtract #subtract a time correction in ps
-    t*=1e-12 #ps in seconds
-    d=t*c*2 #distance in m
-    d*=1e2 #distance in cm
+    if convert_to_wn:
+        c=3e8 #speed of light in m/s
+        t*=1e-12 #ps in seconds
+        d=t*c*2 #distance in m
+        d*=1e2 #distance in cm
+    else: d=t
 
     v = v-np.mean(v)
     v *= gain
-    w = np.blackman(len(v))
-    #wmax_ind = np.argmax(w) #Let's roll window to position of maximum weight in interferogram
-    #centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
-    #imax_ind = np.argmin((centerd - d) ** 2)
-    #w = np.roll(w, imax_ind - wmax_ind, axis=0)
-    #w = 1 #We are disabling the windowing for now
 
-    pow0 = np.sum(v**2)
-    v *= w
-    pownew = np.sum(v**2)
-    norm = np.sqrt(pow0/pownew)
+    if window:
+        w = np.blackman(len(v))
+        # wmax_ind = np.argmax(w) #Let's roll window to position of maximum weight in interferogram
+        # centerd = np.sum(d * v ** 2) / np.sum(v ** 2)
+        # imax_ind = np.argmin((centerd - d) ** 2)
+        # w = np.roll(w, imax_ind - wmax_ind, axis=0)
+        # w = 1 #We are disabling the windowing for now
+        pow0 = np.sum(v**2)
+        v *= w
+        pownew = np.sum(v**2)
+        norm = np.sqrt(pow0/pownew)
+        v*=norm
+
+    # Roll signals so that d=0 is at the beginning (corresponds to a phase of zero)
+    # Added: 2023.11.19
+    # Removed: 2023.11.22, in favor of putting x0 phase info into num.Spectrum
+    #Noff = np.argmin(np.abs(d))
+    #v = np.roll(v,-Noff,axis=0)
+    #d -= np.min(d) #Make all abscissa values positive
+
+    global vshifted
+    vshifted = v
     v = AWA(v, axes=[d])
-    s = num.Spectrum(v, axis=0) * norm
+    s = num.Spectrum(v, axis=0)
     f = s.axes[0]
-
-    # Just discard the information about absolute coordinates;
-    # assume spectra will only be compared when they share the same x-axis
-    # The starting coordinate in x is physically meaninful
-    #pcorr = 2 * np.pi * (np.min(d)) * f
-    #s *= np.exp(+1j * pcorr) #plane waves are in a basis `exp(-1j*x...)`, so we are shifting by `-x0`
 
     posf=(f>0)
     if fmax is not None: posf*=(f<fmax)
@@ -728,26 +733,33 @@ class SpectralProcessor(object):
         assert scomplex.any(),'Input must not be empty!'
 
         # Stack negative frequencies, because we don't have them
-        fs_full = np.hstack( (-fs[::-1], [0], fs) ) #Include zero frequency
-        scomplex_full = np.hstack( (scomplex.conj()[::-1],
-                                    [0],
-                                    scomplex) )
-        interp=interp1d(x=fs_full,y=scomplex_full,
+        interp_pos=interp1d(x=fs,y=scomplex,
                         axis=0, fill_value=0,
                         kind='linear', bounds_error=False) #types beyond 'linear' type could give problematic extrapolations
+        interp_neg=interp1d(x=-fs[::-1],y=scomplex.conj()[::-1],
+                            axis=0, fill_value=0,
+                            kind='linear', bounds_error=False) #types beyond 'linear' type could give problematic extrapolations
 
-        fs_fft = np.fft.fftfreq(len(scomplex_full), d=1 / (2 * fs.max()) ) #Assert `fs` goes up to Nyquist, so that `d` is sampling interval
-        s_fft = interp(fs_fft)
+        # Get desired frequency channels for properly interpolated FFT
+        df = np.diff(fs)[0]
+        Npts = 2*int(fs.max()/df)
+        fs_fft = np.fft.fftfreq(Npts, d=1 / (2 * fs.max()) ) #Assert `fs` goes up to Nyquist, so that `d` is sampling interval
+
+        # Generate proper FFT from interpolation
+        s_fft_pos = interp_pos(fs_fft[fs_fft>=0])
+        s_fft_neg = interp_neg(fs_fft[fs_fft<0])
+        s_fft = np.append(s_fft_pos,s_fft_neg)
 
         intfg = np.fft.ifft(s_fft).real
         Dx = 1 / np.diff(fs)[0]
-        xs = np.linspace(0, Dx, len(intfg))
+        xs = np.linspace(-Dx/2, Dx/2, len(intfg))
+        intfg = np.roll(intfg,Npts//2,axis=0) #Roll forward by half, because our x=0 is in the middle, not at the beginning
 
         return xs,intfg
 
     @classmethod
     def level_phase(cls,f, s, order=1, manual_offset=0, return_leveler=False,
-                    weighted=True, subtract_baseline=False):
+                    weighted=True, subtract_baseline=True):
 
         from scipy.linalg import LinAlgError
         assert np.all(np.isfinite(s)) and len(f)==len(s)
@@ -861,7 +873,8 @@ class SpectralProcessor(object):
         if np.all(f1==f2): return s #No need for interpolation if frequencies are identical
 
         # Find overall phase slope
-        leveler = cls.level_phase(f1,s,order=order,manual_offset=0,return_leveler=True)
+        leveler = cls.level_phase(f1,s,order=order,manual_offset=0,
+                                  subtract_baseline=True,return_leveler=True)
 
         result = interp1d(x=f1,y=s*leveler, **interp_kwargs)(f2)
 
@@ -891,7 +904,7 @@ class SpectralProcessor(object):
     @classmethod
     def impose_threshold(cls,f_mutual,spectrum,spectrum_ref,valid_thresh=.01):
 
-        use_previous = (valid_thresh is 'last') and hasattr(cls,'thresholded_range')
+        use_previous = (valid_thresh == 'last') and hasattr(cls,'thresholded_range')
         if use_previous and len(cls.thresholded_range) == len(f_mutual):
             thresholded_range = cls.thresholded_range
         else:
@@ -1023,7 +1036,8 @@ class SpectralProcessor(object):
     @classmethod
     def smoothed_spectrum(cls,f,scomplex,smoothing=4,order=2):
 
-        leveler = cls.level_phase(f,scomplex,order=order,return_leveler=True,weighted=False)
+        leveler = cls.level_phase(f,scomplex,order=order,return_leveler=True,
+                                  weighted=True,subtract_baseline=True)
 
         scomplexl = scomplex*leveler
 
@@ -1031,51 +1045,69 @@ class SpectralProcessor(object):
 
         return scomplexl / leveler
 
-    coincidence_exponent=6
+    def phase_aligned_spectrum(self, f, spectra,
+                               phase_alignment_exponent=None):
 
-    def phase_aligned_spectrum(self, f, spectra, verbose=False,
-                               coincidence_exponent=None):
-
-        if coincidence_exponent is None: coincidence_exponent=self.coincidence_exponent
+        if phase_alignment_exponent is None: phase_alignment_exponent=self.phase_alignment_exponent
         #self.s0s=[] #Debugging - check the operands for phase alignments
 
-        def aligned_spectrum(s0, s, p0=0):
+        def aligned_spectrum(s0, s, leveler0=1):
 
             #Determine and remove average phase of stot, since it could be wrapping like crazy
-            leveler = self.level_phase(f, s0 , order=1, manual_offset=0, return_leveler=True)
+            #leveler = self.level_phase(f, s0 , order=1, manual_offset=0, return_leveler=True,
+            #                           weighted=True,subtract_baseline=True)
 
             # Debugging - check the leveling
             #self.s0s.append(num.Spectrum(AWA(s0 * leveler, axes=[f], axis_names=['X Frequency']), axis=0))
 
-            phase0 = self.get_phase(f, s0 * leveler, manual_offset=0,
+            phase0 = self.get_phase(f, s0, manual_offset=0,
                                     level_phase=False)
-            phase = self.get_phase(f, s * leveler, manual_offset=0,
-                                   level_phase=False)
-            coincidence = (np.abs(s0) * np.abs(s)) ** coincidence_exponent
+            phase = self.get_phase(f, s * leveler0, manual_offset=0,
+                                   level_phase=False) #make a guess that we should level new phase to same as previous
+            coincidence = (np.abs(s0) * np.abs(s)) ** phase_alignment_exponent
+            coincidence /= coincidence.max() #Just to be a standardized distribution
 
             if not coincidence.any(): return s,0
 
-            norm = np.sum(coincidence)
-            p = np.sum((phase0 - phase) * coincidence) / norm
+            # 2023.11.24: Notebook entitled "PRISM SPECTROSCOPY DIAGNOSTICS.IPYNB" demonstrates that
+            # new method with offset is superior by 2x compared to old method
+            use_new=True
+            if use_new:  #This doesn't work very well so far, optimization overshoots?
+                S = s*leveler0
+                def residual(args):
+                    delta, p0 = args
+                    S_aligned = self.phase_displace(f,S,delta) # p is phase per unit frequency
+                    S_aligned *= np.exp(1j*p0)
+                    return np.abs(s0-S_aligned)*coincidence
+                from scipy.optimize import leastsq
+                delta,p0 = leastsq(residual,(0,0),factor=1e-3)[0]
+                #p0=0
 
-            pdiff = p-p0
-            p = p - np.round(pdiff/(2*np.pi))*2*np.pi #Add as many factors of 2*pi as minimizes `pdiff`
-            # We are assuming that a physical shift of the spectrum of order 2*pi is unlikely,
-            # otherwise, any attempt match adjacent phase spectra will be hopeless anyway!
+            else:
+                norm = np.sum(coincidence)
+                fcenter = np.sum(f * coincidence) / norm
+                pdiff = np.sum((phase0 - phase) * coincidence) / norm
+                #pdiff -= np.round(pdiff/(2*np.pi))*2*np.pi #Add as many factors of 2*pi as minimizes `pdiff`
 
-            fcenter = np.sum(f * coincidence) / norm
+                # We are assuming that a physical shift of the spectrum of order 2*pi is unlikely,
+                # otherwise, any attempt match adjacent phase spectra will be hopeless anyway!
 
-            spectrum_aligned = self.phase_displace(f, s, p/fcenter )
+                # This is by how much we need to roll next spectral phase forwards
+                delta = pdiff/fcenter
+                p0=0
 
-            return spectrum_aligned, p
+            leveler = leveler0 * np.exp(1j * f * delta) * np.exp(1j*p0)
+            spectrum_aligned = s * leveler
+
+            return spectrum_aligned, leveler
 
         #Find the spectrum with greatest weight
         weights = [np.sum(np.abs(spectrum)**2)
                    for spectrum in spectra]
         ind0 = np.argmax(weights)
-        if verbose: print('Primary index for phase alignment:',ind0)
+        print('Primary index for phase alignment:',ind0)
 
-        self.phase_alignments= [0] * len(spectra)
+        self.phase_levelers= [1] * len(spectra)
         spectra_aligned=[0]*len(spectra)
         spectra_aligned[ind0] = spectrum_cmp = spectra[ind0]
         total_count=1
@@ -1083,19 +1115,19 @@ class SpectralProcessor(object):
         #Count backward, then forward
         index_list = np.append( np.arange(ind0-1,-1,-1),
                                 np.arange(ind0+1,len(spectra),1) )
-        phase_alignment_cmp = 0
+        latest_leveler = 1
         for i in index_list:
-            spectrum_aligned, phase_alignment_cmp = aligned_spectrum(spectrum_cmp,
-                                                                    spectra[i],
-                                                                     phase_alignment_cmp)
+            spectrum_aligned, latest_leveler = aligned_spectrum(spectrum_cmp,
+                                                                     spectra[i],
+                                                                     latest_leveler)
             spectra_aligned[i] = spectrum_aligned
-            self.phase_alignments[i] = phase_alignment_cmp
-            if i==ind0+1: phase_alignment_cmp = 0 #Re-set if we're now comparing to `ind0`
+            self.phase_levelers[i] = latest_leveler
+            if i==ind0+1: latest_leveler = 1 #Re-set if we're now comparing to `ind0`
             total_count+=1
 
             #When we hit the first, re-set our reference spectrum
             if i==0: spectrum_cmp=spectra[ind0]
-            else: spectrum_cmp = spectrum_cmp+spectrum_aligned
+            else: spectrum_cmp = spectrum_aligned
 
         assert total_count==len(spectra)
 
@@ -1200,7 +1232,8 @@ class SpectralProcessor(object):
         #Determine global leveler that removes average x-coordinate of all interferograms
         if len(ss):
             S = np.sum(ss,axis=0)
-            self.global_leveler = self.level_phase(f0,S,order=1,return_leveler=True)
+            self.global_leveler = self.level_phase(f0,S,order=1,return_leveler=True,
+                                                   weighted=True,subtract_baseline=True)
             ss = [s * self.global_leveler for s in ss]
         else: self.global_leveler = np.ones(f0.shape) #In case there is no data to level
 
@@ -1217,7 +1250,10 @@ class SpectralProcessor(object):
                  sample_spectra,
                  sample_BB_spectra,
                  ref_spectra,
-                 ref_BB_spectra):
+                 ref_BB_spectra,
+                 phase_alignment_exponent=2):
+
+        self.phase_alignment_exponent=phase_alignment_exponent
 
         assert len(sample_spectra) == len(sample_BB_spectra), \
             "We require the same number of spectrum accumulations for both sample and sample bright-beam!"
@@ -1311,7 +1347,7 @@ class SpectralProcessor(object):
         if align_phase:
             print('Aligning phase...')
             spectra0 = spectra
-            spectra = self.phase_aligned_spectrum(f0, spectra0, verbose=False)
+            spectra = self.phase_aligned_spectrum(f0, spectra0)
 
             if view_phase_alignment:
                 from matplotlib import pyplot as plt
@@ -1332,7 +1368,6 @@ class SpectralProcessor(object):
                 plt.plot(f0, a - c, color='r')
                 plt.ylabel('Spectral density lost to phase',
                            rotation=270,labelpad=20,color='r')
-                plt.xlim(500, 2500)
 
                 # Now plot directly the corrected phases
                 plt.subplot(212)
@@ -1435,7 +1470,8 @@ class SpectralProcessor(object):
                                                                    view_phase_alignment_leveling=view_phase_alignment_leveling,
                                                                    BB_normalize=BB_normalize,BB_phase=BB_phase,
                                                                    **kwargs)
-        #If sample spectrum is non-empty, do normalization
+
+        #If sample spectrum is empty, fill it with zeros so normalization won't break
         if not self.sample_spectrum_abs.any():
             self.f_sample = self.f_ref
             self.sample_spectrum_abs = np.zeros(self.f_ref.shape)
@@ -1462,12 +1498,6 @@ class SpectralProcessor(object):
             self.norm_spectrum = self.smoothed_spectrum(self.f_norm, self.norm_spectrum,
                                                         smoothing,
                                                         order=4)  # High-order leveling (then de-leveling) required for accurate smoothing
-
-        """#If sample spectrum is empty (allowed), just return 0
-        else:
-            self.f_sample = self.f_norm = self.f_ref
-            self.sample_spectrum_abs = self.norm_spectrum_abs = np.zeros(self.f_ref.shape)
-            self.sample_spectrum = self.norm_spectrum = np.zeros(self.f_ref.shape)"""
 
         return self.f_norm, self.norm_spectrum_abs, self.norm_spectrum
 
@@ -1503,19 +1533,28 @@ def average_spectrum_block(specblock1,specblock2):
         eparams1 = eparams1[eparams1!=0]
         eparams1 = np.append(eparams1, [0]*(len(f)-len(eparams1))) #make sure envelope parameters have right size for stacking
 
+    # Get average spectral amplitude
+    sabsavg = np.sqrt(np.abs(s1) ** 2 + np.abs(s2) ** 2) / np.sqrt(2)
+
+    # Get and apply levelers, to get constituent phases
     leveler1 = SpectralProcessor.level_phase(f, s1*e1, order=1, manual_offset=0, return_leveler=True,
-                                              weighted=True, subtract_baseline=False) #consider the enveloped spectrum when determining how to level phase
+                                              weighted=True, subtract_baseline=True) #consider the enveloped spectrum when determining how to level phase
+    s1_leveled = s1 * leveler1
+
     leveler2 = SpectralProcessor.level_phase(f, s2*e2, order=1, manual_offset=0, return_leveler=True,
-                                              weighted=True, subtract_baseline=False)
+                                              weighted=True, subtract_baseline=True)
+    s2_leveled = s2 * leveler2
 
-    #Sum the leveled spectra, then add back the average slope
-    savg = (s1*leveler1 + s2*leveler2)/2
-    #avg_leveler = np.sqrt(leveler1*leveler2) #This method of averaging levelers has a "quadrant ambiguity"
-    #sloper = 1/avg_leveler
-    sloper = (1/leveler1 + 1/leveler2)/2 #It is not easy to come up with an average leveler, but this one is tested to work (under not outrageous circumstances)
-    pavg = np.angle(savg*sloper)
+    # Get average phase
+    pavg = np.angle(s1_leveled+s2_leveled)
 
-    sabsavg = np.sqrt(np.abs(s1)**2+np.abs(s2)**2)/np.sqrt(2)
+    # Determine what "in-between" leveler should be reversed
+    p1lev = np.unwrap(np.angle(leveler1))
+    p2lev = np.unwrap(np.angle(leveler2))
+    W1 = np.sum(np.abs(s1))
+    W2 = np.sum(np.abs(s2))
+    p3lev = (W1 * p1lev + W2 * p2lev) / (W1+W2)
+    pavg -= p3lev # subtract leveler phase
 
     return np.array([f,sabsavg,pavg,e1,eparams1])
 
@@ -1665,49 +1704,100 @@ def BB_referenced_linescan(linescan,spectra_BB,
 
         raise
 
+def standardize_spectra_shape(spectra):
+
+    # Make sure input data has the (silly but) standard shape of (Nspectra x 5, Nfreq)
+    spectra = np.array(spectra)
+    if spectra.ndim == 3:
+        ogshape = spectra.shape
+        newshape = (np.prod(ogshape[:2]), ogshape[-1])
+        spectra = np.reshape(spectra, newshape)
+
+    return spectra
+
+def zero_phases_in_interval(frequencies,phases,sabs,zero_phase_interval,
+                            N2pis=100,weighted=False):
+
+    # Set phase within some frequency interval to zero,
+    #  optimizing for flatness up to an arbitrary factor of 2pi
+    #  Which factor of 2pi is best?  Whichever minimizes the flatness residual
+    if not (hasattr(zero_phase_interval, '__len__')
+            and len(zero_phase_interval) >= 2): return phases
+
+    # We want a list of phase spectra, and we will work over all of the individual spectra
+    # We assume all share the same frequencies axis
+    if phases.ndim==1: phases=np.array([phases])
+    if sabs.ndim==1: sabs=np.array([sabs])
+
+    fmin, fmax = np.min(zero_phase_interval), np.max(zero_phase_interval)
+    f0 = np.mean((fmin, fmax))
+    interval = (frequencies > fmin) * (frequencies < fmax)
+
+    n2pis = np.arange(-N2pis, N2pis + 1, 1)
+    n2pis = n2pis[np.newaxis, :]  # Try leveling into different `2pi` regimes
+
+    if interval.any():  # Only do anything if interval turns out to have data
+        for n, phase in enumerate(phases):  # iterate over points
+            include = interval * (~np.isclose(sabs[n], 0))  # disregard empty data points
+            if not include.any(): continue
+
+            if weighted: pval = np.sum(sabs[n][include]**2*phase[include])/np.sum(sabs[n][include]**2)
+            else: pval = np.mean(phase[include])  # average phase inside freq interval
+
+            pcorr = frequencies[:, np.newaxis] / f0 * (
+                        2 * np.pi * n2pis - pval) - 2 * np.pi * n2pis  # This will make phase in interval equal to some multiple of 2pi
+            phase_options = phase[:, np.newaxis] + pcorr
+            residuals = np.sum((phase_options[include]) ** 2, axis=0)  # Minimize the average slope
+            phases[n] = phase_options[:, np.argmin(residuals)]
+
+    return phases.squeeze()
+
 def normalized_spectrum(sample_spectra, sample_BB_spectra,
                         ref_spectra, ref_BB_spectra,
                         apply_envelope=True, envelope_width=1,
                         level_phase=False, align_phase=True,
+                        phase_aligment_exponent=6,
                         phase_offset=0,smoothing=None, valid_thresh=.01,
                         piecewise_flattening=0,
-                        zero_phase_interval=None):
+                        zero_phase_interval=None,**kwargs):
+
+    sample_spectra = standardize_spectra_shape(sample_spectra)
+    sample_BB_spectra = standardize_spectra_shape(sample_BB_spectra)
+    ref_spectra = standardize_spectra_shape(ref_spectra)
+    ref_BB_spectra = standardize_spectra_shape(ref_BB_spectra)
 
     try:
         SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
-                               ref_spectra, ref_BB_spectra)
+                               ref_spectra, ref_BB_spectra,
+                               phase_alignment_exponent=phase_aligment_exponent)
 
         f, snorm_abs,snorm = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
                                 smoothing=smoothing,
                                 valid_thresh=valid_thresh,
                                 window=False,
                                 align_phase=align_phase,
-                                view_phase_alignment=False)
+                                view_phase_alignment=False,
+                                **kwargs)
 
-        if level_phase: snorm = SP.level_phase(f,snorm,order=1,manual_offset=None,weighted=True)
+        phase = SP.get_phase(f, snorm, level_phase=False,
+                             order=0, manual_offset=None)  # Only level using the offset we apply
 
-        elif piecewise_flattening:
-            phase = SP.get_phase(f, snorm, level_phase=False)
-            to_fit = phase
-            offset,params = numrec.PiecewiseLinearFit(f,to_fit,nbreakpoints=piecewise_flattening,error_exp=2)
-            phase -= offset
-            snorm = snorm_abs*np.exp(1j*phase)
+        if level_phase:
 
-        #Now finally apply manual offset
-        phase=SP.get_phase(f, snorm, level_phase=True,
-                           order=0, manual_offset=phase_offset) #Only level using the offset we apply
+            phase = zero_phases_in_interval(frequencies=f, phases=phase, sabs=snorm_abs,
+                                             zero_phase_interval=zero_phase_interval)
 
-        # Try leveling phase across a particular range of energies
-        if level_phase and hasattr(zero_phase_interval, '__len__') \
-                and len(zero_phase_interval) >= 2:
+            if piecewise_flattening:
+                phase = SP.get_phase(f, snorm, level_phase=False)
+                to_fit = phase
+                offset,params = numrec.PiecewiseLinearFit(f,to_fit,nbreakpoints=piecewise_flattening,error_exp=2)
+                phase -= offset
+                snorm = snorm_abs*np.exp(1j*phase)
 
-            fmin, fmax = np.min(zero_phase_interval), np.max(zero_phase_interval)
-            f0 = np.mean((fmin, fmax))
-            interval = (f > fmin) * (f < fmax)
-            if interval.any():  # Only do anything if interval turns out to have data
-                pval = np.mean(phase[interval])  # average phase inside freq interval
-                pcorr = f / f0 * (-pval) #This will zero by the average value inside interval
-                phase += pcorr
+            if phase_offset:
+                #Now finally apply manual offset
+                f0 = np.mean(f)
+                phase += phase_offset * f / f0
 
         return np.array([f,
                          snorm_abs.real,
@@ -1729,7 +1819,8 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                         phase_offset=0, smoothing=None, valid_thresh=.01,
                         piecewise_flattening=0,
                         zero_phase_interval=None,
-                        heal_linescan=False):
+                        heal_linescan=False,
+                        phase_alignment_exponent=6):
 
     global SP
 
@@ -1752,7 +1843,8 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
             #--- Compute normalized spectrum at this pixel
             if SP is None: # Initialize spectral processor
                 SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
-                                       ref_spectra, ref_BB_spectra)
+                                       ref_spectra, ref_BB_spectra,
+                                       phase_alignment_exponent=phase_alignment_exponent)
             else:
                 SP.sample_spectra = sample_spectra #re-set sample spectra, only
 
@@ -1766,11 +1858,12 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
 
             #--- Do all the phase leveling
             if level_phase:
-                snorm = SP.level_phase(f, snorm, order=1, manual_offset=None, weighted=False)
+                snorm = SP.level_phase(f, snorm, order=1, manual_offset=None,
+                                       weighted=False, subtract_baseline=True)
 
             # Now get phase
-            phase = SP.get_phase(f, snorm, level_phase=True,
-                                 order=0, manual_offset=phase_offset)  # Order 0 means only offset is used
+            phase = SP.get_phase(f, snorm, level_phase=True,weighted=False,
+                                 order=0, manual_offset=phase_offset)  # Order 0 means only the offset is used
 
             #--- Interpolate normalized spectrum at this pixel to common frequency axis
             if fmutual is None:  fmutual = f
@@ -1792,29 +1885,9 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
         #--- Phase leveling
         if level_phase:
 
-            # Set phase within some frequency interval to zero,
-            #  optimizing for flatness up to an arbitrary factor of 2pi
-            #  Which factor of 2pi is best?  Whichever minimizes the flatness residual
-            if hasattr(zero_phase_interval, '__len__') \
-                 and len(zero_phase_interval) >= 2:
-
-                fmin,fmax = np.min(zero_phase_interval), np.max(zero_phase_interval)
-                f0 = np.mean((fmin,fmax))
-                interval = (fmutual>fmin)*(fmutual<fmax)
-
-                N2pis = 100
-                n2pis = np.arange(-N2pis, N2pis+1, 1)
-                n2pis = n2pis[np.newaxis, :]  # Try leveling into different `2pi` regimes
-
-                if interval.any(): #Only do anything if interval turns out to have data
-                    for n,phase in enumerate(phases): #iterate over points
-                        include = interval * (~np.isclose(snorms_abs[n],0)) #disregard empty data points
-                        if not include.any(): continue
-                        pval = np.mean(phase[include])  # average phase inside freq interval
-                        pcorr = fmutual[:,np.newaxis] / f0 * (2*np.pi*n2pis - pval) - 2*np.pi*n2pis #This will make phase in interval equal to some multiple of 2pi
-                        phase_options = phase[:,np.newaxis] + pcorr
-                        residuals = np.sum( (phase_options[include])**2, axis=0) #Minimize the average slope
-                        phases[n] = phase_options[:,np.argmin(residuals)]
+            # Set phase within some frequency interval to zero
+            phases = zero_phases_in_interval(frequencies=fmutuals[0], phases=phases, sabs=snorms_abs,
+                                             zero_phase_interval=zero_phase_interval)
 
             # Piecewise leveling only makes sense as the final step
             if piecewise_flattening:
