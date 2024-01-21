@@ -1706,12 +1706,17 @@ def BB_referenced_linescan(linescan,spectra_BB,
 
 def standardize_spectra_shape(spectra):
 
-    # Make sure input data has the (silly but) standard shape of (Nspectra x 5, Nfreq)
+    # Make sure input data has the (silly but) standard shape of (Naccumulations x 5, Nfreq)
     spectra = np.array(spectra)
+    ogshape = spectra.shape
+
     if spectra.ndim == 3:
-        ogshape = spectra.shape
         newshape = (np.prod(ogshape[:2]), ogshape[-1])
-        spectra = np.reshape(spectra, newshape)
+    elif spectra.ndim == 4:
+        newshape=(ogshape[0],np.prod(ogshape[1:3]),ogshape[3])
+    else: return spectra
+
+    spectra = np.reshape(spectra, newshape)
 
     return spectra
 
