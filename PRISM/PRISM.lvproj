@@ -419,10 +419,9 @@
 			<Item Name="Control_GetSpectrum_BBnorm_AttenuateBB.ctl" Type="VI" URL="../Control_GetSpectrum_BBnorm_AttenuateBB.ctl"/>
 			<Item Name="Control polarizer 1.ctl" Type="VI" URL="/D/Dropbox/Members/Bragg, Alyssa/PolarizerRotator Folder/Control polarizer 1.ctl"/>
 			<Item Name="ElliptecRotationAE.vi" Type="VI" URL="../../Peripherals/ElliptecRotationAE.vi"/>
+			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="../../../../../../mnOP.Laboratory/Desktop/PRISM Scanning/Thorlabs.MotionControl.Controls.dll"/>
 			<Item Name="PSHet_DAQInAndOut_control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Dropbox/Software/LabVIEW/Pseudoheterodyne/PSHet_DAQInAndOut_control.ctl"/>
 			<Item Name="zi_OptimizeModulation_Control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Dropbox/Software/LabVIEW/Pseudoheterodyne/zi_OptimizeModulation_Control.ctl"/>
-			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="../../../../../../mnOP.Laboratory/Desktop/PRISM Scanning/Thorlabs.MotionControl.Controls.dll"/>
-			<Item Name="DAQActionEngine2.vi" Type="VI" URL="../PRISM(Ulate_Edition) Folder/DAQActionEngine2.vi"/>
 		</Item>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>

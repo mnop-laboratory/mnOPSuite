@@ -1755,7 +1755,7 @@ def zero_phases_in_interval(frequencies,phases,sabs,zero_phase_interval,
             residuals = np.sum((phase_options[include]) ** 2, axis=0)  # Minimize the average slope
             phases[n] = phase_options[:, np.argmin(residuals)]
 
-    return phases.squeeze()
+    return phases
 
 def normalized_spectrum(sample_spectra, sample_BB_spectra,
                         ref_spectra, ref_BB_spectra,
@@ -1815,6 +1815,25 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
         error_file = os.path.join(diagnostic_dir,'normalized_spectrum.err')
         with open(error_file,'w') as f: f.write(error_text)
 
+        file = os.path.join(diagnostic_dir, 'sample_spectra.txt')
+        np.savetxt(file,sample_spectra)
+        file = os.path.join(diagnostic_dir, 'sample_BB_spectra.txt')
+        np.savetxt(file,sample_BB_spectra)
+
+        file = os.path.join(diagnostic_dir, 'ref_spectra.txt')
+        np.savetxt(file,ref_spectra)
+        file = os.path.join(diagnostic_dir, 'ref_BB_spectra.txt')
+        np.savetxt(file,ref_BB_spectra)
+
+        #txt='%s %s'%(sample_spectra.shape,sample_spectra.dtype)
+        """with open(pickle_file,'w') as f:
+            f.write(txt)
+            pickle.dump(dict(sample_spectra=sample_spectra,
+                             sample_BB_spectra=sample_BB_spectra,
+                             ref_spectra=ref_spectra,
+                             ref_BB_spectra=ref_BB_spectra),
+                        f)"""
+
         return False
 
 def normalized_linescan(sample_linescan, sample_BB_spectra,
@@ -1831,6 +1850,8 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
 
     sample_linescan = np.array(sample_linescan)
     sample_BB_spectra = np.array(sample_BB_spectra)
+    ref_spectra = np.array(ref_spectra)
+    ref_BB_spectra = np.array(ref_BB_spectra)
 
     if heal_linescan:  sample_linescan = heal_linescan_recursive(sample_linescan)
 
@@ -1912,6 +1933,10 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                          phases.real],dtype=float)
     except:
         error_text = str(traceback.format_exc())
+        error_text += '\n sample spectra shape: %s'%str(sample_spectra.shape)
+        error_text += '\n sample BB spectra shape: %s'%str(sample_BB_spectra.shape)
+        error_text += '\n reference BB spectra shape: %s'%str(ref_spectra.shape)
+        error_text += '\n reference spectra shape: %s'%str(ref_BB_spectra.shape)
         error_file = os.path.join(diagnostic_dir,'normalized_linescan.err')
         with open(error_file,'w') as f:
             f.write(error_text)
