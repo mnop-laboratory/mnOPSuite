@@ -119,7 +119,6 @@
 		<Item Name="Control_PRISMRasterScan_ProtocolsLoop.ctl" Type="VI" URL="../Control_PRISMRasterScan_ProtocolsLoop.ctl"/>
 		<Item Name="Control_LineScanRemoteControl.ctl" Type="VI" URL="../Control_LineScanRemoteControl.ctl"/>
 		<Item Name="PSHet_zi_OptimizeModulation(MokuGO).vi" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/PSHet_zi_OptimizeModulation(MokuGO).vi"/>
-		<Item Name="BenchtopScanSandbox.vi" Type="VI" URL="/D/Dropbox/Software/LabVIEW/PRISM Scanning/PRISM Folder/BenchtopScanSandbox.vi"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="vi.lib" Type="Folder">
 				<Item Name="Check Color Table Size.vi" Type="VI" URL="/&lt;vilib&gt;/picture/jpeg.llb/Check Color Table Size.vi"/>
@@ -420,8 +419,10 @@
 			<Item Name="Control polarizer 1.ctl" Type="VI" URL="/D/Dropbox/Members/Bragg, Alyssa/PolarizerRotator Folder/Control polarizer 1.ctl"/>
 			<Item Name="ElliptecRotationAE.vi" Type="VI" URL="../../Peripherals/ElliptecRotationAE.vi"/>
 			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="../../../../../../mnOP.Laboratory/Desktop/PRISM Scanning/Thorlabs.MotionControl.Controls.dll"/>
-			<Item Name="PSHet_DAQInAndOut_control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Dropbox/Software/LabVIEW/Pseudoheterodyne/PSHet_DAQInAndOut_control.ctl"/>
-			<Item Name="zi_OptimizeModulation_Control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Dropbox/Software/LabVIEW/Pseudoheterodyne/zi_OptimizeModulation_Control.ctl"/>
+			<Item Name="PSHet_DAQInAndOut_control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/PSHet_DAQInAndOut_control.ctl"/>
+			<Item Name="zi_OptimizeModulation_Control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/zi_OptimizeModulation_Control.ctl"/>
+			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="/D/Dropbox/Software/LabVIEW/PRISM Scanning/Thorlabs.MotionControl.Controls.dll"/>
+			<Item Name="DAQActionEngine.vi" Type="VI" URL="/D/Dropbox/Software/LabVIEW/PRISM Scanning/PRISM Folder/PRISM(Ulate_Edition) Folder/DAQActionEngine.vi"/>
 		</Item>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>

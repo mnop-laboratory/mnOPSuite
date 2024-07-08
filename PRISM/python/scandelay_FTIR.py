@@ -560,7 +560,8 @@ def fit_envelope(f,sabs):
 
     return envelope,envelope_params
 
-def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=3000,window=True,convert_to_wn=True):
+fmax = 3000 # in wavenumbers
+def fourier_xform(a,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=fmax,window=True,convert_to_wn=True):
 
     v,t=np.array(a)
     t=t-tsubtract #subtract a time correction in ps
