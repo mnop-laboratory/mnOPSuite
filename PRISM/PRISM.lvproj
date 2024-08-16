@@ -421,8 +421,6 @@
 			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="../../../../../../mnOP.Laboratory/Desktop/PRISM Scanning/Thorlabs.MotionControl.Controls.dll"/>
 			<Item Name="PSHet_DAQInAndOut_control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/PSHet_DAQInAndOut_control.ctl"/>
 			<Item Name="zi_OptimizeModulation_Control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/zi_OptimizeModulation_Control.ctl"/>
-			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="/D/Dropbox/Software/LabVIEW/PRISM Scanning/Thorlabs.MotionControl.Controls.dll"/>
-			<Item Name="DAQActionEngine.vi" Type="VI" URL="/D/Dropbox/Software/LabVIEW/PRISM Scanning/PRISM Folder/PRISM(Ulate_Edition) Folder/DAQActionEngine.vi"/>
 		</Item>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>

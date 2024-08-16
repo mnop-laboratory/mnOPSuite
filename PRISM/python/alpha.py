@@ -142,7 +142,10 @@ class PiecewiseInterpolator(object):
 
         return result
 
-
+def index_at_noninteger(array,indx):
+    PI = PiecewiseInterpolator(np.arange(len(array)),
+                               array)
+    return float(PI(indx))
 
 
 def pump_generator(wns=(600,1000,1200,1400,1600,1800),
@@ -207,6 +210,24 @@ def set_pump(pump,pump_max=pumpmax):
 
         if pump > pump_max: pump = pump_max
         cmd = "@mir setpump %1.1f" % pump
+        print(cmd)
+        Ws.send(cmd)
+        time.sleep(3)  # make sure the delay is at least 0.5 s
+
+        Ws.close()
+        return cmd
+    except:
+        Ws.close()
+        raise
+
+def hp_set_pump (pump,pump_max=pumpmax):    # Chris added this on 7/8/2024
+
+    Ws = WsHandler(alpha_uri)
+    try:
+        print('Setting pump to %1.1f...' % pump )
+
+        if pump > pump_max: pump = pump_max
+        cmd = "@hp setpump %1.1f" % pump
         print(cmd)
         Ws.send(cmd)
         time.sleep(3)  # make sure the delay is at least 0.5 s
@@ -346,6 +367,29 @@ def replicate(idx,wait_time=10,optimize=False): #wait time is in seconds
         print("sending cmd: %s" % cmd)
         ws.send(cmd)
         time.sleep(np.maximum(wait_time, 0.5))  # make sure the delay is at least 0.5 s
+
+        ws.close()
+
+    except:
+        ws.close()
+        raise
+
+    return cmd
+
+def hp_set_wavelength(wavelength,wait_time=2,optimize=False): #wait time is in seconds
+    # Chris added this on 7/8/2024
+    ws = WsHandler(alpha_uri)
+
+    module = "hp"  # name of the module
+    task = "setsignal"  # wavelength tuning command
+
+    try:
+        cmd = "@%s %s %i" % (module, task, wavelength)
+        print("sending cmd: %s" % cmd)
+        ws.send(cmd)
+        wait_time = np.maximum(wait_time, 3)
+        print('waiting some time (s): ',wait_time)
+        time.sleep(wait_time)  # make sure the delay is at least 2 s
 
         ws.close()
 

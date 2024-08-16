@@ -21,10 +21,10 @@ interp_kwargs=dict(bounds_error=False,
 
 def test(intfgs_arr, delay_calibration_factor=1,
                          order=1,refresh_alignment=True,
-                         flattening_order=20,Nwavelengths=4):
+                         flattening_order=5,Nwavelengths=4):
 
     try:
-        file=os.path.join(diagnostic_dir,'intfg_err.txt')
+        file=os.path.join(diagnostic_dir,'interferograms.txt')
         intfgs_arr = np.loadtxt(file)
         result =align_interferograms_base(intfgs_arr, delay_calibration_factor=-2.5,
                                      shift0=-10,optimize_shift=True,shift_range=10,
