@@ -277,7 +277,7 @@ def set_pump_factor(factor=0.2):
         raise
 
 def set_replicator_table(wavelengths=None,wns=None,pumps=None,
-                         pump_max=100):
+                         pump_max=100,monochromate=True):
 
     assert wavelengths is not None or wns is not None
     assert wavelengths is None or wns is None
@@ -294,6 +294,11 @@ def set_replicator_table(wavelengths=None,wns=None,pumps=None,
             print(cmd)
             Ws.send(cmd)
             time.sleep(20)  # make sure the delay is at least 0.5 s
+
+            cmd = "@mono setsignal %i" % wavelengths[i]
+            print(cmd)
+            Ws.send(cmd)
+            time.sleep(2)
 
             if pumps is not None:
                 pump=pumps[i]

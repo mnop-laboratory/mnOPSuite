@@ -106,7 +106,6 @@
 		<Item Name="ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi" Type="VI" URL="../ScanDelay_FTIR_AcquireInterferogram_DAQmx.vi"/>
 		<Item Name="ScanDelay_FTIR_GetSpectrum_Aligning.vi" Type="VI" URL="../ScanDelay_FTIR_GetSpectrum_Aligning.vi"/>
 		<Item Name="ScanDelay_FTIR_InterferogramDAQmxTask.vi" Type="VI" URL="../ScanDelay_FTIR_InterferogramDAQmxTask.vi"/>
-		<Item Name="ScanDelay_FTIR_PointSpectroscopy.vi" Type="VI" URL="../ScanDelay_FTIR_PointSpectroscopy.vi"/>
 		<Item Name="ScanDelay_FTIR_LineScanSpectroscopy.vi" Type="VI" URL="../ScanDelay_FTIR_LineScanSpectroscopy.vi"/>
 		<Item Name="LineScanRemoteControl.vi" Type="VI" URL="../LineScanRemoteControl.vi"/>
 		<Item Name="LineScanRemoteControl_withRotator.vi" Type="VI" URL="../LineScanRemoteControl_withRotator.vi"/>
@@ -119,6 +118,8 @@
 		<Item Name="Control_PRISMRasterScan_ProtocolsLoop.ctl" Type="VI" URL="../Control_PRISMRasterScan_ProtocolsLoop.ctl"/>
 		<Item Name="Control_LineScanRemoteControl.ctl" Type="VI" URL="../Control_LineScanRemoteControl.ctl"/>
 		<Item Name="PSHet_zi_OptimizeModulation(MokuGO).vi" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/PSHet_zi_OptimizeModulation(MokuGO).vi"/>
+		<Item Name="AutoRepScan.vi" Type="VI" URL="../AutoRepScan.vi"/>
+		<Item Name="Control_AutoRepScan.ctl" Type="VI" URL="../Control_AutoRepScan.ctl"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="vi.lib" Type="Folder">
 				<Item Name="Check Color Table Size.vi" Type="VI" URL="/&lt;vilib&gt;/picture/jpeg.llb/Check Color Table Size.vi"/>
@@ -404,6 +405,44 @@
 				<Item Name="Waveform Array To Dynamic.vi" Type="VI" URL="/&lt;vilib&gt;/express/express shared/transition.llb/Waveform Array To Dynamic.vi"/>
 				<Item Name="ex_CorrectErrorChain.vi" Type="VI" URL="/&lt;vilib&gt;/express/express shared/ex_CorrectErrorChain.vi"/>
 				<Item Name="NI_AALPro.lvlib" Type="Library" URL="/&lt;vilib&gt;/Analysis/NI_AALPro.lvlib"/>
+				<Item Name="GetHelpDir.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/GetHelpDir.vi"/>
+				<Item Name="BuildHelpPath.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/BuildHelpPath.vi"/>
+				<Item Name="LVBoundsTypeDef.ctl" Type="VI" URL="/&lt;vilib&gt;/Utility/miscctls.llb/LVBoundsTypeDef.ctl"/>
+				<Item Name="Get String Text Bounds.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Get String Text Bounds.vi"/>
+				<Item Name="Get Text Rect.vi" Type="VI" URL="/&lt;vilib&gt;/picture/picture.llb/Get Text Rect.vi"/>
+				<Item Name="Convert property node font to graphics font.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Convert property node font to graphics font.vi"/>
+				<Item Name="Longest Line Length in Pixels.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Longest Line Length in Pixels.vi"/>
+				<Item Name="LVRectTypeDef.ctl" Type="VI" URL="/&lt;vilib&gt;/Utility/miscctls.llb/LVRectTypeDef.ctl"/>
+				<Item Name="Three Button Dialog CORE.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Three Button Dialog CORE.vi"/>
+				<Item Name="Three Button Dialog.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Three Button Dialog.vi"/>
+				<Item Name="DialogTypeEnum.ctl" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/DialogTypeEnum.ctl"/>
+				<Item Name="Not Found Dialog.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Not Found Dialog.vi"/>
+				<Item Name="Set Bold Text.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Set Bold Text.vi"/>
+				<Item Name="eventvkey.ctl" Type="VI" URL="/&lt;vilib&gt;/event_ctls.llb/eventvkey.ctl"/>
+				<Item Name="TagReturnType.ctl" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/TagReturnType.ctl"/>
+				<Item Name="ErrWarn.ctl" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/ErrWarn.ctl"/>
+				<Item Name="Details Display Dialog.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Details Display Dialog.vi"/>
+				<Item Name="Search and Replace Pattern.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Search and Replace Pattern.vi"/>
+				<Item Name="Find Tag.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Find Tag.vi"/>
+				<Item Name="Format Message String.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Format Message String.vi"/>
+				<Item Name="Error Code Database.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Error Code Database.vi"/>
+				<Item Name="GetRTHostConnectedProp.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/GetRTHostConnectedProp.vi"/>
+				<Item Name="Set String Value.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Set String Value.vi"/>
+				<Item Name="Check Special Tags.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Check Special Tags.vi"/>
+				<Item Name="General Error Handler Core CORE.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/General Error Handler Core CORE.vi"/>
+				<Item Name="DialogType.ctl" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/DialogType.ctl"/>
+				<Item Name="General Error Handler.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/General Error Handler.vi"/>
+				<Item Name="Join Strings.vi" Type="VI" URL="/&lt;vilib&gt;/AdvancedString/Join Strings.vi"/>
+				<Item Name="Write To Spreadsheet File.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/file.llb/Write To Spreadsheet File.vi"/>
+				<Item Name="Write To Spreadsheet File (DBL).vi" Type="VI" URL="/&lt;vilib&gt;/Utility/file.llb/Write To Spreadsheet File (DBL).vi"/>
+				<Item Name="Write Spreadsheet String.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/file.llb/Write Spreadsheet String.vi"/>
+				<Item Name="Write To Spreadsheet File (I64).vi" Type="VI" URL="/&lt;vilib&gt;/Utility/file.llb/Write To Spreadsheet File (I64).vi"/>
+				<Item Name="Write To Spreadsheet File (string).vi" Type="VI" URL="/&lt;vilib&gt;/Utility/file.llb/Write To Spreadsheet File (string).vi"/>
+				<Item Name="NI_Gmath.lvlib" Type="Library" URL="/&lt;vilib&gt;/gmath/NI_Gmath.lvlib"/>
+				<Item Name="NI_MAPro.lvlib" Type="Library" URL="/&lt;vilib&gt;/measure/NI_MAPro.lvlib"/>
+			</Item>
+			<Item Name="instr.lib" Type="Folder">
+				<Item Name="Zurich Instruments LabOne.lvlib" Type="Library" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Zurich Instruments LabOne.lvlib"/>
 			</Item>
 			<Item Name="Control_GetSpectrum_Aligning.ctl" Type="VI" URL="../Control_GetSpectrum_Aligning.ctl"/>
 			<Item Name="Control_GetSpectrum_LineScanSpectroscopy.ctl" Type="VI" URL="../Control_GetSpectrum_LineScanSpectroscopy.ctl"/>
@@ -415,12 +454,13 @@
 			<Item Name="Thorlabs.MotionControl.Benchtop.StepperMotorCLI.dll" Type="Document" URL="../Thorlabs.MotionControl.Benchtop.StepperMotorCLI.dll"/>
 			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="../Thorlabs.MotionControl.Controls.dll"/>
 			<Item Name="Thorlabs.MotionControl.KCube.StepperMotorCLI.dll" Type="Document" URL="../Thorlabs.MotionControl.KCube.StepperMotorCLI.dll"/>
-			<Item Name="Control_GetSpectrum_BBnorm_AttenuateBB.ctl" Type="VI" URL="../Control_GetSpectrum_BBnorm_AttenuateBB.ctl"/>
 			<Item Name="Control polarizer 1.ctl" Type="VI" URL="/D/Dropbox/Members/Bragg, Alyssa/PolarizerRotator Folder/Control polarizer 1.ctl"/>
 			<Item Name="ElliptecRotationAE.vi" Type="VI" URL="../../Peripherals/ElliptecRotationAE.vi"/>
 			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="../../../../../../mnOP.Laboratory/Desktop/PRISM Scanning/Thorlabs.MotionControl.Controls.dll"/>
 			<Item Name="PSHet_DAQInAndOut_control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/PSHet_DAQInAndOut_control.ctl"/>
 			<Item Name="zi_OptimizeModulation_Control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/zi_OptimizeModulation_Control.ctl"/>
+			<Item Name="ActionEngineEnum(V2).ctl" Type="VI" URL="../../Peripherals/ActionEngineEnum(V2).ctl"/>
+			<Item Name="t_KCubeActionEngine(V4).vi" Type="VI" URL="../../Peripherals/t_KCubeActionEngine(V4).vi"/>
 		</Item>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>
