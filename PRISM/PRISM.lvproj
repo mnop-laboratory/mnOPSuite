@@ -11,9 +11,7 @@
 		<Property Name="server.vi.callsEnabled" Type="Bool">true</Property>
 		<Property Name="server.vi.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="specify.custom.address" Type="Bool">false</Property>
-		<Item Name="PRISM(Ulate_Edition) Folder" Type="Folder" URL="../PRISM(Ulate_Edition) Folder">
-			<Property Name="NI.DISK" Type="Bool">true</Property>
-		</Item>
+		<Item Name="PRISM(Ulate_Edition) Folder" Type="Folder"/>
 		<Item Name="Control_GetSpectrum_BBnorm.ctl" Type="VI" URL="../Control_GetSpectrum_BBnorm.ctl"/>
 		<Item Name="DAQ Assistant_0" Type="NI-DAQmx Task">
 			<Property Name="\0\AI.Max" Type="Str">10</Property>
@@ -117,7 +115,6 @@
 		<Item Name="Control_PRISMRasterScan_ActivityLoop.ctl" Type="VI" URL="../Control_PRISMRasterScan_ActivityLoop.ctl"/>
 		<Item Name="Control_PRISMRasterScan_ProtocolsLoop.ctl" Type="VI" URL="../Control_PRISMRasterScan_ProtocolsLoop.ctl"/>
 		<Item Name="Control_LineScanRemoteControl.ctl" Type="VI" URL="../Control_LineScanRemoteControl.ctl"/>
-		<Item Name="PSHet_zi_OptimizeModulation(MokuGO).vi" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/PSHet_zi_OptimizeModulation(MokuGO).vi"/>
 		<Item Name="AutoRepScan.vi" Type="VI" URL="../AutoRepScan.vi"/>
 		<Item Name="Control_AutoRepScan.ctl" Type="VI" URL="../Control_AutoRepScan.ctl"/>
 		<Item Name="Dependencies" Type="Dependencies">
@@ -368,42 +365,8 @@
 				<Item Name="Trim Whitespace One-Sided.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Trim Whitespace One-Sided.vi"/>
 				<Item Name="whitespace.ctl" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/whitespace.ctl"/>
 				<Item Name="Trim Whitespace.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Trim Whitespace.vi"/>
-				<Item Name="Open API.vi" Type="VI" URL="/&lt;vilib&gt;/Liquid Instruments/Liquid Instruments Moku/moku/Open API.vi"/>
-				<Item Name="REST Client.lvlib" Type="Library" URL="/&lt;vilib&gt;/Liquid Instruments/Liquid Instruments Moku/REST API/JKI-HTTP-REST-Client-master/source/REST Client.lvlib"/>
-				<Item Name="LabVIEWHTTPClient.lvlib" Type="Library" URL="/&lt;vilib&gt;/httpClient/LabVIEWHTTPClient.lvlib"/>
-				<Item Name="Check if File or Folder Exists.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/libraryn.llb/Check if File or Folder Exists.vi"/>
-				<Item Name="NI_FileType.lvlib" Type="Library" URL="/&lt;vilib&gt;/Utility/lvfile.llb/NI_FileType.lvlib"/>
-				<Item Name="NI_PackedLibraryUtility.lvlib" Type="Library" URL="/&lt;vilib&gt;/Utility/LVLibp/NI_PackedLibraryUtility.lvlib"/>
-				<Item Name="Error handling.vi" Type="VI" URL="/&lt;vilib&gt;/Liquid Instruments/Liquid Instruments Moku/moku/Error handling.vi"/>
-				<Item Name="upload_instrument.vi" Type="VI" URL="/&lt;vilib&gt;/Liquid Instruments/Liquid Instruments Moku/moku/upload_instrument.vi"/>
-				<Item Name="list_files.vi" Type="VI" URL="/&lt;vilib&gt;/Liquid Instruments/Liquid Instruments Moku/moku/list_files.vi"/>
-				<Item Name="upload_instrument_bitstreams.vi" Type="VI" URL="/&lt;vilib&gt;/Liquid Instruments/Liquid Instruments Moku/moku/upload_instrument_bitstreams.vi"/>
-				<Item Name="describe.vi" Type="VI" URL="/&lt;vilib&gt;/Liquid Instruments/Liquid Instruments Moku/moku/describe.vi"/>
-				<Item Name="Moku waveformgenerator generate_waveform.vi" Type="VI" URL="/&lt;vilib&gt;/Liquid Instruments/Liquid Instruments Moku/waveformgenerator/Moku waveformgenerator generate_waveform.vi"/>
-				<Item Name="Close API.vi" Type="VI" URL="/&lt;vilib&gt;/Liquid Instruments/Liquid Instruments Moku/moku/Close API.vi"/>
 				<Item Name="Space Constant.vi" Type="VI" URL="/&lt;vilib&gt;/dlg_ctls.llb/Space Constant.vi"/>
-				<Item Name="Path To Command Line String.vi" Type="VI" URL="/&lt;vilib&gt;/AdvancedString/Path To Command Line String.vi"/>
-				<Item Name="PathToUNIXPathString.vi" Type="VI" URL="/&lt;vilib&gt;/Platform/CFURL.llb/PathToUNIXPathString.vi"/>
-				<Item Name="subSigGeneratorBlock.vi" Type="VI" URL="/&lt;vilib&gt;/express/express input/SimulateSignalBlock.llb/subSigGeneratorBlock.vi"/>
-				<Item Name="Nearest Frequency for Block.vi" Type="VI" URL="/&lt;vilib&gt;/express/express input/SimulateSignalConfig.llb/Nearest Frequency for Block.vi"/>
-				<Item Name="Nearest Freq in Int Cycles.vi" Type="VI" URL="/&lt;vilib&gt;/express/express input/SimulateSignalConfig.llb/Nearest Freq in Int Cycles.vi"/>
-				<Item Name="subInternalTiming.vi" Type="VI" URL="/&lt;vilib&gt;/express/express input/SimulateSignalBlock.llb/subInternalTiming.vi"/>
 				<Item Name="NI_MABase.lvlib" Type="Library" URL="/&lt;vilib&gt;/measure/NI_MABase.lvlib"/>
-				<Item Name="subShouldUseDefSigName.vi" Type="VI" URL="/&lt;vilib&gt;/express/express input/SimulateSignalBlock.llb/subShouldUseDefSigName.vi"/>
-				<Item Name="sub2ShouldUseDefSigName.vi" Type="VI" URL="/&lt;vilib&gt;/express/express input/SimulateSignalBlock.llb/sub2ShouldUseDefSigName.vi"/>
-				<Item Name="subGetSignalName.vi" Type="VI" URL="/&lt;vilib&gt;/express/express input/SimulateSignalBlock.llb/subGetSignalName.vi"/>
-				<Item Name="ex_GenAddAttribs.vi" Type="VI" URL="/&lt;vilib&gt;/express/express input/SimulateSignalBlock.llb/ex_GenAddAttribs.vi"/>
-				<Item Name="ex_WaveformAttribsPlus.ctl" Type="VI" URL="/&lt;vilib&gt;/express/express shared/transition.llb/ex_WaveformAttribsPlus.ctl"/>
-				<Item Name="Timestamp Subtract.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/TSOps.llb/Timestamp Subtract.vi"/>
-				<Item Name="I128 Timestamp.ctl" Type="VI" URL="/&lt;vilib&gt;/Waveform/TSOps.llb/I128 Timestamp.ctl"/>
-				<Item Name="DU64_U32SubtractWithBorrow.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/TSOps.llb/DU64_U32SubtractWithBorrow.vi"/>
-				<Item Name="ex_SetExpAttribsAndT0.vi" Type="VI" URL="/&lt;vilib&gt;/express/express shared/transition.llb/ex_SetExpAttribsAndT0.vi"/>
-				<Item Name="ex_WaveformAttribs.ctl" Type="VI" URL="/&lt;vilib&gt;/express/express shared/transition.llb/ex_WaveformAttribs.ctl"/>
-				<Item Name="Timestamp Add.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/TSOps.llb/Timestamp Add.vi"/>
-				<Item Name="DU64_U32AddWithOverflow.vi" Type="VI" URL="/&lt;vilib&gt;/Waveform/TSOps.llb/DU64_U32AddWithOverflow.vi"/>
-				<Item Name="ex_SetAllExpressAttribs.vi" Type="VI" URL="/&lt;vilib&gt;/express/express shared/transition.llb/ex_SetAllExpressAttribs.vi"/>
-				<Item Name="Waveform Array To Dynamic.vi" Type="VI" URL="/&lt;vilib&gt;/express/express shared/transition.llb/Waveform Array To Dynamic.vi"/>
-				<Item Name="ex_CorrectErrorChain.vi" Type="VI" URL="/&lt;vilib&gt;/express/express shared/ex_CorrectErrorChain.vi"/>
 				<Item Name="NI_AALPro.lvlib" Type="Library" URL="/&lt;vilib&gt;/Analysis/NI_AALPro.lvlib"/>
 				<Item Name="GetHelpDir.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/GetHelpDir.vi"/>
 				<Item Name="BuildHelpPath.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/BuildHelpPath.vi"/>
@@ -456,11 +419,10 @@
 			<Item Name="Thorlabs.MotionControl.KCube.StepperMotorCLI.dll" Type="Document" URL="../Thorlabs.MotionControl.KCube.StepperMotorCLI.dll"/>
 			<Item Name="Control polarizer 1.ctl" Type="VI" URL="/D/Dropbox/Members/Bragg, Alyssa/PolarizerRotator Folder/Control polarizer 1.ctl"/>
 			<Item Name="ElliptecRotationAE.vi" Type="VI" URL="../../Peripherals/ElliptecRotationAE.vi"/>
-			<Item Name="Thorlabs.MotionControl.Controls.dll" Type="Document" URL="../../../../../../mnOP.Laboratory/Desktop/PRISM Scanning/Thorlabs.MotionControl.Controls.dll"/>
-			<Item Name="PSHet_DAQInAndOut_control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/PSHet_DAQInAndOut_control.ctl"/>
-			<Item Name="zi_OptimizeModulation_Control.ctl" Type="VI" URL="/D/Dropbox/Software/LabVIEW/Pseudoheterodyne/zi_OptimizeModulation_Control.ctl"/>
 			<Item Name="ActionEngineEnum(V2).ctl" Type="VI" URL="../../Peripherals/ActionEngineEnum(V2).ctl"/>
 			<Item Name="t_KCubeActionEngine(V4).vi" Type="VI" URL="../../Peripherals/t_KCubeActionEngine(V4).vi"/>
+			<Item Name="Control_ZurichAE.ctl" Type="VI" URL="../../Peripherals/Control_ZurichAE.ctl"/>
+			<Item Name="ZurichAE.vi" Type="VI" URL="../../Peripherals/ZurichAE.vi"/>
 		</Item>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>

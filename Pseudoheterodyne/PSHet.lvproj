@@ -16,6 +16,8 @@
 		<Item Name="PSHet_DAQInAndOut_control.ctl" Type="VI" URL="../PSHet_DAQInAndOut_control.ctl"/>
 		<Item Name="zi_OptimizeModulation_Control.ctl" Type="VI" URL="../zi_OptimizeModulation_Control.ctl"/>
 		<Item Name="PSHet_zi_OptimizeModulation.vi" Type="VI" URL="../PSHet_zi_OptimizeModulation.vi"/>
+		<Item Name="ZurichAE.vi" Type="VI" URL="../ZurichAE.vi"/>
+		<Item Name="Control_ZurichAE.ctl" Type="VI" URL="../Control_ZurichAE.ctl"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="instr.lib" Type="Folder">
 				<Item Name="Zurich Instruments LabOne.lvlib" Type="Library" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Zurich Instruments LabOne.lvlib"/>
