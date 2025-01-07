@@ -1232,7 +1232,7 @@ class SpectralProcessor(object):
         ss_ref = [ss_ref[idx] for idx in ordering]
 
         #Determine global leveler that removes average x-coordinate of all interferograms
-        if len(ss):
+        if False and len(ss): # @ALEX: 2025.01.06 added False to disable this clause
             S = np.sum(ss,axis=0)
             self.global_leveler = self.level_phase(f0,S,order=1,return_leveler=True,
                                                    weighted=True,subtract_baseline=True)
