@@ -18,6 +18,8 @@
 		<Item Name="PSHet_zi_OptimizeModulation.vi" Type="VI" URL="../PSHet_zi_OptimizeModulation.vi"/>
 		<Item Name="Control_ZurichAE.ctl" Type="VI" URL="../../Peripherals/Control_ZurichAE.ctl"/>
 		<Item Name="ZurichAE.vi" Type="VI" URL="../../Peripherals/ZurichAE.vi"/>
+		<Item Name="SimpleChartRecorder.vi" Type="VI" URL="../../Peripherals/SimpleChartRecorder.vi"/>
+		<Item Name="SimpleChartRecorder.ctl" Type="VI" URL="../../Peripherals/SimpleChartRecorder.ctl"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="instr.lib" Type="Folder">
 				<Item Name="Zurich Instruments LabOne.lvlib" Type="Library" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Zurich Instruments LabOne.lvlib"/>

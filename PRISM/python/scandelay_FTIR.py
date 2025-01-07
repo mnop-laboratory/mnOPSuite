@@ -126,10 +126,11 @@ def model_xs(indices,params):
 
 xaxis=None
 
+# @ALEX: 2025.01.05 - changed `fit_xs_order` from 6 to 1
 def align_interferograms_test(intfgs_arr, delay_calibration_factor=1,
                          shift0=None,optimize_shift=True,shift_range=15,
                          flattening_order=5,noise=0,
-                         fit_xs=True, fit_xs_order=6,smooth_xs = 100):
+                         fit_xs=True, fit_xs_order=1,smooth_xs = 100):
 
     global dX,best_delay,xaxis,all_xs0,all_xs_fitted
     global intfg_mutual_fwd,intfg_mutual_bwd
