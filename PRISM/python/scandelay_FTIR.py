@@ -799,11 +799,11 @@ class SpectralProcessor(object):
         else: return s*leveler
 
     @classmethod
-    def get_phase(cls,f,s,
-                  level_phase=True,
+    def get_phase(cls, f, s,
+                  level=True,
                   **kwargs):
 
-        if level_phase:
+        if level:
             s=cls.level_phase(f,s,**kwargs)
 
         p = np.unwrap(np.angle(s))
@@ -816,7 +816,70 @@ class SpectralProcessor(object):
         return p.real
 
     @classmethod
-    def get_phases(cls,f,spectra,
+    def get_phases_in_sequence(cls, f, spectra,
+                               threshold=1e-1,
+                               level=True, order=6,
+                               **kwargs):
+        """" The purpose of this function is not to process spectra, but rather to gather
+        the phases of spectra for display together in a sequence.
+
+        The idea is partly to see how the phases "line up" from individual spectra.
+        To produce a sequence of phases where this can be evaluated, this function
+         figures out a global curve that levels the combined phase spectrum.  It
+         propagates this leveling curve to all the individual spectra.  It subtracts
+         a suitable number of `2*pi`s such that each individual spectrum lies somewhere
+         on the global curve.
+
+         So, the function is merely cosmetic in that it applies
+         1) a global background correction, and
+         2) piecewise factors of 2*pi."""
+
+        # Get the zone of validity for all spectra
+        where_goods = [ (np.abs(s) > np.abs(s).max() * threshold) * np.isfinite(s) \
+                        for s in spectra ]
+        where_all_good = np.sum(where_goods,axis=0).astype(bool) # This is an "or"
+
+        # Get global leveler
+        stot = np.sum(spectra,axis=0)
+        x,intfg = cls.get_intfg(f,stot)
+        x0 = np.sum(x*intfg**2)/np.sum(intfg**2)
+        global_leveler = np.exp(2*np.pi*1j*f*x0)
+
+        # Get phase backbone, with extra leveler, unwrapped in the relevant energy range
+        phase_backbone = cls.get_phase(f, stot*global_leveler,
+                                       manual_offset=0, level=True,order=order) # Don't level yet, we want raw phase
+        global_leveler *= cls.level_phase(f,stot*global_leveler,manual_offset=0, order=order, return_leveler=True) # update global leveler with further leveling that gave us this phase backbone
+        phase_backbone[where_all_good] = np.unwrap(phase_backbone[where_all_good])
+        phase_backbone[~where_all_good] = np.nan
+
+        #return [phase_backbone]
+
+        # Go through spectra and add as many factors of 2*pi as necessary to match backbone
+        phases = []
+        for i,(s,where_good) in enumerate(zip(spectra,where_goods)):
+            phase = cls.get_phase(f, s*global_leveler, manual_offset=0,
+                                  level=False,
+                                  **kwargs)  # only leveling will be that from the global leveler, then offsets by 2*pi
+            phase[~where_good] = np.nan
+            #phase[where_good] = np.unwrap(phase[where_good])
+
+            # Weighted average phase in this spectrum range
+            pavg = np.sum(phase[where_good]*np.abs(s[where_good])**2) \
+                    / np.sum(np.abs(s[where_good])**2)
+
+            # Weighted average backbone phase in this spectrum range
+            pavg_backbone = np.sum(phase_backbone[where_good] * np.abs(stot[where_good]) ** 2) \
+                             / np.sum(np.abs(stot[where_good]) ** 2)
+
+            # Compare the two and subtract the number of pis by which we differ from backbone
+            n2pis = np.round( (pavg - pavg_backbone) / (2*np.pi) )
+            if np.isnan(pavg) or np.isnan(pavg_backbone): raise ValueError
+            phases.append(phase - 2*np.pi*n2pis)
+
+        return phases
+
+    @classmethod
+    def get_phases_old(cls,f,spectra,
                       threshold=1e-2,
                       ps=None,
                       level=True,order=2,
@@ -834,8 +897,8 @@ class SpectralProcessor(object):
         for i,s in enumerate(spectra):
             if ps is not None:
                 s=cls.phase_displace(f,s,ps[i])
-            phase=cls.get_phase(f,s,manual_offset=0,
-                                level_phase=False,**kwargs) #level phase has to be false, we want the overall phase!
+            phase=cls.get_phase(f, s, manual_offset=0,
+                                level=False, **kwargs) #level phase has to be false, we want the overall phase!
             thresh=np.abs(s).max()*threshold
             phase[np.abs(s) <= thresh] = np.nan
             phases.append(phase)
@@ -999,7 +1062,7 @@ class SpectralProcessor(object):
         spectrum_abs = cls.summed_spectrum(ss, abs=True)
         spectrum_phase = cls.get_phase(f0,
                                        cls.summed_spectrum(ss,abs=False),
-                                       level_phase=False) #We could add option for leveling phase
+                                       level=False) #We could add option for leveling phase
 
         return np.array([f0, spectrum_abs, spectrum_phase],dtype=np.float)
 
@@ -1063,9 +1126,9 @@ class SpectralProcessor(object):
             #self.s0s.append(num.Spectrum(AWA(s0 * leveler, axes=[f], axis_names=['X Frequency']), axis=0))
 
             phase0 = self.get_phase(f, s0, manual_offset=0,
-                                    level_phase=False)
+                                    level=False)
             phase = self.get_phase(f, s * leveler0, manual_offset=0,
-                                   level_phase=False) #make a guess that we should level new phase to same as previous
+                                   level=False) #make a guess that we should level new phase to same as previous
             coincidence = (np.abs(s0) * np.abs(s)) ** phase_alignment_exponent
             coincidence /= coincidence.max() #Just to be a standardized distribution
 
@@ -1079,7 +1142,7 @@ class SpectralProcessor(object):
                 def residual(args):
                     delta, p0 = args
                     S_aligned = self.phase_displace(f,S,delta) # p is phase per unit frequency
-                    S_aligned *= np.exp(1j*p0)
+                    #S_aligned *= np.exp(1j*p0)
                     return np.abs(s0-S_aligned)*coincidence
                 from scipy.optimize import leastsq
                 delta,p0 = leastsq(residual,(0,0),factor=1e-3)[0]
@@ -1370,17 +1433,18 @@ class SpectralProcessor(object):
                 plt.plot(f0, a - c, color='r')
                 plt.ylabel('Spectral density lost to phase',
                            rotation=270,labelpad=20,color='r')
+                plt.title('Target = %s'%target)
 
                 # Now plot directly the corrected phases
                 plt.subplot(212)
-                phases0 = self.get_phases(f0,spectra0,
+                phases0 = self.get_phases_in_sequence(f0, spectra0,
+                                                      threshold=.1,
+                                                      ps=None,
+                                                      level=True, order=view_phase_alignment_leveling)
+                phases = self.get_phases_in_sequence(f0, spectra,
                                                      threshold=.1,
                                                      ps=None,
-                                                     level=True,order=view_phase_alignment_leveling)
-                phases = self.get_phases(f0,spectra,
-                                                     threshold=.1,
-                                                     ps=None,
-                                                    level=True,order=view_phase_alignment_leveling)
+                                                     level=True, order=view_phase_alignment_leveling)
 
                 label0='Uncorrected'; label='Corrected'
                 for i in range(len(phases0)):
@@ -1390,6 +1454,7 @@ class SpectralProcessor(object):
                 plt.xlabel('Frequency')
                 plt.ylabel('Phase ')
                 plt.legend(loc='best')
+                plt.title('Target = %s'%target)
 
                 #plt.subplots_adjust(hspace=.3)
                 plt.tight_layout()
@@ -1638,7 +1703,7 @@ def BB_referenced_spectrum(spectra,spectra_BB,
                                      align_phase=align_phase,
                                      view_phase_alignment=False)
 
-        phase = SP.get_phase(f, spectrum, level_phase=True)
+        phase = SP.get_phase(f, spectrum, level=True)
 
         return np.array([f,
                          spectrum_abs.real,
@@ -1677,7 +1742,7 @@ def BB_referenced_linescan(linescan,spectra_BB,
                                          align_phase=align_phase,
                                          view_phase_alignment=False,
                                          recompute_reference=False) #`recompute_reference=False` saves us half our effort
-            phase = SP.get_phase(f, spectrum, level_phase=True)
+            phase = SP.get_phase(f, spectrum, level=True)
 
             if fmutual is None:  fmutual = f
             else:
@@ -1761,9 +1826,9 @@ def zero_phases_in_interval(frequencies,phases,sabs,zero_phase_interval,
 
 def normalized_spectrum(sample_spectra, sample_BB_spectra,
                         ref_spectra, ref_BB_spectra,
-                        apply_envelope=True, envelope_width=1,
+                        apply_envelope=True, envelope_width=1.5,
                         level_phase=False, align_phase=True,
-                        phase_aligment_exponent=6,
+                        phase_alignment_exponent=0.25,
                         phase_offset=0,smoothing=None, valid_thresh=.01,
                         piecewise_flattening=0,
                         zero_phase_interval=None,**kwargs):
@@ -1776,7 +1841,7 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
     try:
         SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
                                ref_spectra, ref_BB_spectra,
-                               phase_alignment_exponent=phase_aligment_exponent)
+                               phase_alignment_exponent=phase_alignment_exponent)
 
         f, snorm_abs,snorm = SP(apply_envelope=apply_envelope, envelope_width=envelope_width,
                                 smoothing=smoothing,
@@ -1786,7 +1851,7 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                                 view_phase_alignment=False,
                                 **kwargs)
 
-        phase = SP.get_phase(f, snorm, level_phase=False,
+        phase = SP.get_phase(f, snorm, level=False,
                              order=0, manual_offset=None)  # Only level using the offset we apply
 
         if level_phase:
@@ -1795,7 +1860,7 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                                              zero_phase_interval=zero_phase_interval)
 
             if piecewise_flattening:
-                phase = SP.get_phase(f, snorm, level_phase=False)
+                phase = SP.get_phase(f, snorm, level=False)
                 to_fit = phase
                 offset,params = numrec.PiecewiseLinearFit(f,to_fit,nbreakpoints=piecewise_flattening,error_exp=2)
                 phase -= offset
@@ -1840,13 +1905,13 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
 
 def normalized_linescan(sample_linescan, sample_BB_spectra,
                         ref_spectra, ref_BB_spectra,
-                        apply_envelope=True, envelope_width=1,
-                        level_phase=False, align_phase=True,
+                        apply_envelope=True, envelope_width=1.5,
+                        level_phase=False, align_phase=False,
                         phase_offset=0, smoothing=None, valid_thresh=.01,
                         piecewise_flattening=0,
                         zero_phase_interval=None,
                         heal_linescan=False,
-                        phase_alignment_exponent=6):
+                        phase_alignment_exponent=0.25):
 
     global SP
 
@@ -1885,12 +1950,12 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                                      recompute_reference=False) #`recompute_reference=False` saves us half our effort
 
             #--- Do all the phase leveling
-            if level_phase:
+            if level_phase: # We made a choice here not to allow baseline subtraction, keep the leveling "physical"
                 snorm = SP.level_phase(f, snorm, order=1, manual_offset=None,
-                                       weighted=False, subtract_baseline=True)
+                                       weighted=False, subtract_baseline=False)
 
             # Now get phase
-            phase = SP.get_phase(f, snorm, level_phase=True,weighted=False,
+            phase = SP.get_phase(f, snorm, level=True, weighted=False,
                                  order=0, manual_offset=phase_offset)  # Order 0 means only the offset is used
 
             #--- Interpolate normalized spectrum at this pixel to common frequency axis
