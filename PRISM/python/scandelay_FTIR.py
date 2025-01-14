@@ -541,10 +541,18 @@ def spectral_envelope(f,A,f0,df,expand_envelope=1):
 def fit_envelope(f,sabs):
 
     global result
-    ind=np.argmax(sabs*f**2) # This is a trick to make sure if we have any frequency-halved "ghost" spectral parts, the highest frequency gaussian wins
-    A=sabs[ind]
+    ind=np.argmax(sabs)
     f0 = f[ind]
-    df = f0/10
+    df = f0/4
+    A=sabs[ind]
+    # This is a trick to make sure if we have any frequency-halved "ghost" spectral parts, the highest frequency gaussian with amplitude `A2` wins
+    f0_2 = 2*f0
+    ind2 = np.argmin(np.abs(f-f0_2))
+    A_2 = sabs[ind2]
+    if A_2/A > 0.02:
+        f0=f0_2
+        A=A_2
+        print('Picking higher peak!')
     x0=np.array([A,f0,df])
 
     def to_minimize(x):
@@ -1913,7 +1921,8 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                         zero_phase_interval=None,
                         heal_linescan=False,
                         phase_alignment_exponent=0.25,
-                        subtract_baseline=False):
+                        subtract_baseline=False,
+                        BB_normalize=True):
     # Don't mess with the order of the arguments list, it's sensitively tuned for LabView!
 
     global SP
@@ -1949,8 +1958,9 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                                      valid_thresh=valid_thresh,
                                      window=False,
                                      align_phase=align_phase,
+                                     BB_normalize=BB_normalize,
                                      view_phase_alignment=False,
-                                     recompute_reference=False) #`recompute_reference=False` saves us half our effort
+                                     recompute_reference=False,) #`recompute_reference=False` saves us half our effort
 
             #--- Do all the phase leveling
             if level_phase: # We made a choice here not to allow baseline subtraction, keep the leveling "physical"
