@@ -188,7 +188,8 @@ def pump_generator(wns=(600,1000,1200,1400,1600,1800),
 
 def get_pump_at_replication_wavelength(wl,
                                         wns=(600, 1000, 1200, 1400, 1600, 1800),
-                                        pump_vals=(100, 10, 6, 5, 10, 15)):
+                                        pump_vals=(100, 10, 6, 5, 10, 15),
+                                       default_pump=25):
 
     wns=np.array(wns).flatten() #They may come in as a row vector
     pump_vals=np.array(pump_vals).flatten()
@@ -198,7 +199,13 @@ def get_pump_at_replication_wavelength(wl,
                                     min_val=np.min(pump_vals),
                                     max_val=100)
 
-    return pumpgen(wn_rep)
+    pumpvals = pumpgen(wn_rep)
+
+    # Presumably if we got `nan`, it's because we fed in garbage,
+    # but we don't intend to output an uncontrolled number, use default pump
+    pumpvals = np.where(np.isnan(pumpvals), default_pump, pumpvals)
+
+    return pumpvals
 
 pumpmax=100
 

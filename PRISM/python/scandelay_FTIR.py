@@ -541,7 +541,7 @@ def spectral_envelope(f,A,f0,df,expand_envelope=1):
 def fit_envelope(f,sabs):
 
     global result
-    ind=np.argmax(sabs)
+    ind=np.argmax(sabs*f**2) # This is a trick to make sure if we have any frequency-halved "ghost" spectral parts, the highest frequency gaussian wins
     A=sabs[ind]
     f0 = f[ind]
     df = f0/10
@@ -761,7 +761,7 @@ class SpectralProcessor(object):
 
     @classmethod
     def level_phase(cls,f, s, order=1, manual_offset=0, return_leveler=False,
-                    weighted=True, subtract_baseline=True):
+                    weighted=True, subtract_baseline=False):
 
         from scipy.linalg import LinAlgError
         assert np.all(np.isfinite(s)) and len(f)==len(s)
@@ -792,7 +792,8 @@ class SpectralProcessor(object):
                 attempts += 1
 
         if manual_offset:
-            pcorr = manual_offset * f/np.mean(np.abs(f))
+            f0 = np.sum(np.abs(f)*np.abs(s)**2)/np.sum(np.abs(s)**2) # Spectrum-weighted average frequency
+            pcorr = manual_offset * f/f0
             leveler *= np.exp(1j*pcorr)
 
         if return_leveler: return leveler
@@ -1911,7 +1912,9 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                         piecewise_flattening=0,
                         zero_phase_interval=None,
                         heal_linescan=False,
-                        phase_alignment_exponent=0.25):
+                        phase_alignment_exponent=0.25,
+                        subtract_baseline=False):
+    # Don't mess with the order of the arguments list, it's sensitively tuned for LabView!
 
     global SP
 
@@ -1952,7 +1955,7 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
             #--- Do all the phase leveling
             if level_phase: # We made a choice here not to allow baseline subtraction, keep the leveling "physical"
                 snorm = SP.level_phase(f, snorm, order=1, manual_offset=None,
-                                       weighted=False, subtract_baseline=False)
+                                       weighted=False, subtract_baseline=subtract_baseline)
 
             # Now get phase
             phase = SP.get_phase(f, snorm, level=True, weighted=False,
