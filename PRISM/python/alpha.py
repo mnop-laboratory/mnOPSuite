@@ -284,7 +284,8 @@ def set_pump_factor(factor=0.2):
         raise
 
 def set_replicator_table(wavelengths=None,wns=None,pumps=None,
-                         pump_max=100,monochromate=True):
+                         pump_max=100,monochromate=True,
+                         tunetime=30,savetime=2):
 
     assert wavelengths is not None or wns is not None
     assert wavelengths is None or wns is None
@@ -300,12 +301,12 @@ def set_replicator_table(wavelengths=None,wns=None,pumps=None,
             cmd = "@mir setsignal %i" % wavelengths[i]
             print(cmd)
             Ws.send(cmd)
-            time.sleep(20)  # make sure the delay is at least 0.5 s
+            time.sleep(tunetime)  # make sure the delay is at least 0.5 s
 
             cmd = "@mono setsignal %i" % wavelengths[i]
             print(cmd)
             Ws.send(cmd)
-            time.sleep(2)
+            time.sleep(savetime)
 
             if pumps is not None:
                 pump=pumps[i]
@@ -313,19 +314,19 @@ def set_replicator_table(wavelengths=None,wns=None,pumps=None,
                 cmd = "@mir setpump %1.1f" % pump
                 print(cmd)
                 Ws.send(cmd)
-                time.sleep(2)  # make sure the delay is at least 0.5 s
+                time.sleep(savetime)  # make sure the delay is at least 0.5 s
 
             cmd = "@rep save %i" % i
             print(cmd)
             Ws.send(cmd)
-            time.sleep(1)  # make sure the delay is at least 0.5 s
+            time.sleep(savetime)  # make sure the delay is at least 0.5 s
 
         Ws.close()
     except:
         Ws.close()
         raise
 
-def touchup_replicator_table(N,pumps=None,optimize=True):
+def touchup_replicator_table(N,pumps=None,optimize=True,tunetime=15):
 
     Ws = WsHandler(alpha_uri)
 
