@@ -326,7 +326,7 @@ def set_replicator_table(wavelengths=None,wns=None,pumps=None,
         Ws.close()
         raise
 
-def touchup_replicator_table(N,pumps=None,optimize=True,tunetime=15):
+def touchup_replicator_table(N,Nstart=0,pumps=None,optimize=True,tunetime=15,optimize_time=7):
 
     Ws = WsHandler(alpha_uri)
 
@@ -339,29 +339,37 @@ def touchup_replicator_table(N,pumps=None,optimize=True,tunetime=15):
     else: setpump=False
 
     try:
-        for i in range(N):
+        i=Nstart
+        for j in range(N):
 
             print('Touching up replication i=%i' % i)
 
             cmd = "@rep load %i" % i
+            print(cmd)
             Ws.send(cmd)
-            time.sleep(10)  # make sure the delay is at least 0.5 s
+            print('Waiting %1.2f seconds..'%tunetime)
+            time.sleep(tunetime)  # make sure the delay is at least 0.5 s
 
             if optimize:
                 print('Optimizing...')
                 cmd = "@mir optimize"
+                print(cmd)
                 Ws.send(cmd)
-                time.sleep(7)  # make sure the delay is at least 0.5 s
+                print('Waiting %1.2f seconds..'%optimize_time)
+                time.sleep(optimize_time)
 
             if setpump:
                 print('Setting pump=%1.1f...'%pumps[i])
                 cmd='@mir setpump %1.1f'%pumps[i]
+                print(cmd)
                 Ws.send(cmd)
                 time.sleep(1)
 
             cmd = "@rep save %i" % i
             Ws.send(cmd)
             time.sleep(1)  # make sure the delay is at least 0.5 s
+
+            i+=1
 
         Ws.close()
     except:
