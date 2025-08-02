@@ -2,6 +2,7 @@ import os
 import numpy as np
 import traceback
 import scipy
+import pickle
 from scipy.interpolate import interp1d
 from common import numerics as num
 from common.baseclasses import AWA
@@ -324,15 +325,23 @@ def align_interferograms_new(intfgs_arr, delay_calibration_factor=1,
 
 
 #--- Wrapper
-def align_interferograms(intfgs_arr, delay_calibration_factor=1,
-                         shift0=0,optimize_shift=True,shift_range=15,
-                         flattening_order=20,noise=0):
+def align_interferograms_wrapper(intfgs_arr, delay_calibration_factor=1,
+                                 shift0=0,optimize_shift=True,shift_range=15,
+                                 flattening_order=20,noise=0):
 
     try:
+
         result = align_interferograms_new(intfgs_arr, delay_calibration_factor=delay_calibration_factor,
                                              shift0=shift0, optimize_shift=optimize_shift, shift_range=shift_range,
                                              flattening_order=flattening_order, noise=noise)
-        return result
+
+        #--- Dump the problematic interferograms
+        error_file = os.path.join(diagnostic_dir,'align_interferograms_output.pickle')
+        with open(error_file,'wb') as f:
+            pickle.dump(result,f)
+
+        #return result
+        return result + np.zeros(result.shape)# + 0 #0*np.random.randn(*result.shape) # No idea why, but the latter is needed to prevent an "unknown python / labview error"
 
     except:
 
@@ -342,9 +351,9 @@ def align_interferograms(intfgs_arr, delay_calibration_factor=1,
         with open(error_file,'w') as f: f.write(error_text)
 
         #--- Dump the problematic interferograms
-        error_file = os.path.join(diagnostic_dir,'intfg_err.txt')
-        if not os.path.exists(error_file):
-            np.savetxt(error_file,intfgs_arr)
+        error_file = os.path.join(diagnostic_dir,'align_interferograms_input.pickle')
+        with open(error_file,'wb') as f:
+            pickle.dump(intfgs_arr,f)
 
         return False
 
@@ -408,6 +417,7 @@ def fit_envelope(f,sabs):
 fmax = 3000 # in wavenumbers
 def fourier_xform_new(intfgs_data,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=fmax,window=True,convert_to_wn=True):
 
+    intfgs_data = np.array(intfgs_data)
 
     t = intfgs_data[0]; Nts = len(t)
     v = intfgs_data[1:] # A 2D array of size (Nchannels,Nts)
@@ -481,6 +491,30 @@ def fourier_xform_new(intfgs_data,tsubtract=0,envelope=True,gain=1,fmin=500,fmax
     #    spectrum absolute value (channel 2),
     #    ... etc. for all channels]
     return result
+
+#--- Wrapper
+def fourier_xform_wrapper(intfgs_data,tsubtract=0,envelope=True,gain=1,fmin=500,fmax=fmax,window=True,convert_to_wn=True):
+
+    try:
+        result = fourier_xform_new(intfgs_data,tsubtract=tsubtract,
+                                   envelope=envelope,gain=gain,
+                                   fmin=fmin,fmax=fmax,
+                                   window=window,convert_to_wn=convert_to_wn)
+        return result
+
+    except:
+
+        #--- Dump the error
+        error_text = str(traceback.format_exc())
+        error_file = os.path.join(diagnostic_dir,'fourier_xform.err')
+        with open(error_file,'w') as f: f.write(error_text)
+
+        #--- Dump the problematic interferograms
+        error_file = os.path.join(diagnostic_dir,'fourier_xform_input.err.pickle')
+        with open(error_file,'wb') as f:
+            pickle.dump(intfgs_data,f)
+
+        return False
 
 class SpectralProcessor_new(object):
 
