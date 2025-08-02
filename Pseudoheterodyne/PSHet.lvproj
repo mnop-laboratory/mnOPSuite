@@ -20,6 +20,9 @@
 		<Item Name="ZurichAE.vi" Type="VI" URL="../../Peripherals/ZurichAE.vi"/>
 		<Item Name="SimpleChartRecorder.vi" Type="VI" URL="../../Peripherals/SimpleChartRecorder.vi"/>
 		<Item Name="SimpleChartRecorder.ctl" Type="VI" URL="../../Peripherals/SimpleChartRecorder.ctl"/>
+		<Item Name="MicronixRepeatedScanning.vi" Type="VI" URL="../../../2025.02.22 - Micronix Repeated Scanning/MicronixRepeatedScanning.vi"/>
+		<Item Name="MicronixRepeatedScanning_States.ctl" Type="VI" URL="../../../2025.02.22 - Micronix Repeated Scanning/MicronixRepeatedScanning_States.ctl"/>
+		<Item Name="PSHet_zi_DFTPFM.vi" Type="VI" URL="../PSHet_zi_DFTPFM.vi"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="instr.lib" Type="Folder">
 				<Item Name="Zurich Instruments LabOne.lvlib" Type="Library" URL="/&lt;instrlib&gt;/Zurich Instruments LabOne/Zurich Instruments LabOne.lvlib"/>
@@ -295,6 +298,8 @@
 				<Item Name="Write To Spreadsheet File (I64).vi" Type="VI" URL="/&lt;vilib&gt;/Utility/file.llb/Write To Spreadsheet File (I64).vi"/>
 				<Item Name="Write To Spreadsheet File (string).vi" Type="VI" URL="/&lt;vilib&gt;/Utility/file.llb/Write To Spreadsheet File (string).vi"/>
 				<Item Name="Write To Spreadsheet File.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/file.llb/Write To Spreadsheet File.vi"/>
+				<Item Name="Get System Directory.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/sysdir.llb/Get System Directory.vi"/>
+				<Item Name="System Directory Type.ctl" Type="VI" URL="/&lt;vilib&gt;/Utility/sysdir.llb/System Directory Type.ctl"/>
 			</Item>
 			<Item Name="Acceleration mMc Edited.vi" Type="VI" URL="../../../MicronixScanning/Acceleration mMc Edited.vi"/>
 			<Item Name="Check Idle (non scan).vi" Type="VI" URL="../../../MicronixScanning/Check Idle (non scan).vi"/>

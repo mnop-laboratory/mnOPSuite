@@ -285,13 +285,18 @@ def set_pump_factor(factor=0.2):
 
 def set_replicator_table(wavelengths=None,wns=None,pumps=None,
                          pump_max=100,monochromate=True,
-                         tunetime=30,savetime=2):
+                         tunetime=30,monotime=2,savetime=1,mono_offset=0):
 
     assert wavelengths is not None or wns is not None
     assert wavelengths is None or wns is None
     if wns is not None: wavelengths = wn_to_wl(wns)
     N = len(wavelengths)
     if pumps is not None: assert len(pumps)==N
+
+    wavelengths= np.array(wavelengths)
+    if monochromate and mono_offset:
+        # monochromoter will be offset upwards by offset, but its output should produce the target wavelengths
+        wavelengths -= mono_offset
 
     Ws = WsHandler(alpha_uri)
     try:
@@ -301,12 +306,15 @@ def set_replicator_table(wavelengths=None,wns=None,pumps=None,
             cmd = "@mir setsignal %i" % wavelengths[i]
             print(cmd)
             Ws.send(cmd)
+            print('Waiting for %i seconds..'%tunetime)
             time.sleep(tunetime)  # make sure the delay is at least 0.5 s
 
-            cmd = "@mono setsignal %i" % wavelengths[i]
-            print(cmd)
-            Ws.send(cmd)
-            time.sleep(savetime)
+            if monochromate:
+                cmd = "@mono setsignal %i" % (wavelengths[i]+mono_offset)
+                print(cmd)
+                Ws.send(cmd)
+                print('Waiting for %i seconds..'%monotime)
+                time.sleep(monotime)
 
             if pumps is not None:
                 pump=pumps[i]
@@ -314,6 +322,7 @@ def set_replicator_table(wavelengths=None,wns=None,pumps=None,
                 cmd = "@mir setpump %1.1f" % pump
                 print(cmd)
                 Ws.send(cmd)
+                print('Waiting for %i seconds..'%savetime)
                 time.sleep(savetime)  # make sure the delay is at least 0.5 s
 
             cmd = "@rep save %i" % i
@@ -391,8 +400,11 @@ def replicate(idx,wait_time=10,optimize=False): #wait time is in seconds
 
         ws.close()
 
-    except:
+    except Exception as e:
         ws.close()
+        with open('replicate_debug.txt','w') as f:
+            f.write(str(e))
+
         raise
 
     return cmd
