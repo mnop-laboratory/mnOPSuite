@@ -1123,7 +1123,7 @@ class SpectralProcessor(object):
                                        cls.summed_spectrum(ss, abs=False),
                                        level=False)  # We could add option for leveling phase
 
-        return np.array([f0, spectrum_abs, spectrum_phase], dtype=np.float)
+        return np.array([f0, spectrum_abs, spectrum_phase], dtype=float)
 
     ###########
     #- User API
@@ -1483,7 +1483,6 @@ def heal_linescan(linescan):
     print('Healing linescan!')
 
     linescan = np.array(linescan,dtype=float)
-    Nrows = SpectralProcessor.Nrows
 
     isempty = lambda arr: np.isclose(arr,0).all()
 
@@ -1496,29 +1495,28 @@ def heal_linescan(linescan):
         # We need nonzero data from 'nextnext' and preferably also 'next' pixels
         # So we cannot conceivably heal the last two pixels of data, sadly!
         if i <= len(healed_linescan) - 3:
-            Nspectra = len(healed_linescan[i]) // Nrows
+            Nspectra = len(healed_linescan[i])
 
             for j in range(Nspectra): #Iterate over accumulations at this pixel
-                j1, j2 = j * Nrows, (j + 1) * Nrows
-                shere = healed_linescan[i][j1:j2]
+                shere = healed_linescan[i,j]
 
                 if isempty(shere):
                     print('Spectrum at pixel %i, accumulation %i is empty!'%(i,j))
-                    snext = healed_linescan[i + 1][j1:j2]
-                    snextnext = healed_linescan[i + 2][j1:j2]
+                    snext = healed_linescan[i + 1,j]
+                    snextnext = healed_linescan[i + 2,j]
 
                     # Fill hole with data from next pixel, and fill next pixel with `next-nextnext` average
                     if not isempty(snext):
                         print("We're taking data from pixel %i!"%(i+1))
-                        healed_linescan[i][j1:j2] = snext  # Assume data for `here` landed at next pixel
+                        healed_linescan[i,j] = snext  # Assume data for `here` landed at next pixel
                         if not isempty(snextnext):
                             print("And we're filling in pixel %i with an average of %i and %i!"%(i+1,i+1,i+2))
                             # We are sending two spectra to `average_spectrum_block`, each are multi-channel spectra (2D arrays)
-                            healed_linescan[i + 1][j1:j2] = average_spectrum_block(snext,snextnext) # Fill (false) next pixel spectrum with an average
+                            healed_linescan[i + 1,j] = average_spectrum_block(snext,snextnext) # Fill (false) next pixel spectrum with an average
                             #healed_linescan[i + 1][j1:j2] = (snext + snextnext) / 2  # Fill (false) next pixel spectrum with an average
                     elif not isempty(snextnext):
                         print("We're taking data from pixel %i!"%(i+2))
-                        healed_linescan[i][j1:j2] = snextnext  # Assume data for `here` landed two pixels away
+                        healed_linescan[i,j] = snextnext  # Assume data for `here` landed two pixels away
 
     return np.array(healed_linescan,dtype=float)
 
@@ -1669,8 +1667,12 @@ def zero_phases_in_interval(frequencies,phases,sabs,zero_phase_interval,
 
     # We want a list of phase spectra, and we will work over all of the individual spectra
     # We assume all share the same frequencies axis
-    if phases.ndim==1: phases=np.array([phases])
-    if sabs.ndim==1: sabs=np.array([sabs])
+    if phases.ndim==1:
+        assert sabs.ndim==1
+        phases=np.array([phases])
+        sabs = np.array([sabs])
+        single_spectrum = True
+    else: single_spectrum=False
 
     fmin, fmax = np.min(zero_phase_interval), np.max(zero_phase_interval)
     f0 = np.mean((fmin, fmax))
@@ -1692,6 +1694,8 @@ def zero_phases_in_interval(frequencies,phases,sabs,zero_phase_interval,
             phase_options = phase[:, np.newaxis] + pcorr
             residuals = np.sum((phase_options[include]) ** 2, axis=0)  # Minimize the average slope
             phases[n] = phase_options[:, np.argmin(residuals)]
+
+    if single_spectrum: phases = np.array(phases).squeeze() # Remove the redunant outer dimension
 
     return phases
 
@@ -1753,17 +1757,17 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
         #--- Dump the error
         error_text = str(traceback.format_exc())
         error_file = os.path.join(diagnostic_dir,'normalized_spectrum.err')
-        with open(error_file,'w') as f: f.write(error_text)
+        with open(error_file,'w') as file: file.write(error_text)
 
         filepath = os.path.join(diagnostic_dir, 'normalized_spectrum_inputs.err.pickle')
-        with open(filepath,'wb') as f:
+        with open(filepath,'wb') as file:
             pickle.dump(dict(sample_spectra=sample_spectra,
                              sample_BB_spectra=sample_BB_spectra,
                              ref_spectra=ref_spectra,
                              ref_BB_spectra=ref_BB_spectra),
-                        f)
+                        file)
 
-        return False
+        raise
 
 def normalized_linescan(sample_linescan, sample_BB_spectra,
                         ref_spectra, ref_BB_spectra,
@@ -1937,10 +1941,10 @@ def load_linescan(path):
         Naccum_BB = len(BB_spectrum)
         assert Naccum_samp==Naccum_BB,'Sample spectra and BB spectrum should have same number of accumulations, but %i!=%i!'%(Naccum_samp,Naccum_BB)
 
-        # Output is 4D: (1 + Npoints, Naccum, Nchannel+.., Nfreq)
-        output = np.concatenate( (BB_spectrum[np.newaxis,:],
-                                  sample_linescan), axis=0 ) # In this way the first "volume" is BB and the rest is linescan
-        return output
+        # Output is tuple of a 4D + 3D array:
+        # (Npoints, Naccum, Nchannel+.., Nfreq)
+        # (Naccum, Nchannel+.., Nfreq)
+        return (sample_linescan,BB_spectrum)
 
     except:
 
@@ -1985,11 +1989,8 @@ def load_spectrum(path):
         assert Naccum_samp == Naccum_BB, 'Sample spectrum and BB spectrum should have same number of accumulations, but %i!=%i!' % (
         Naccum_samp, Naccum_BB)
 
-        # Output is 4D: (2, Naccum, Nchannel+.., Nfreq)
-        output = np.concatenate((BB_spectrum[np.newaxis,:],
-                                 sample_spectrum[np.newaxis,:]),
-                                axis=0)  # In this way the first "volume" is BB and the second is sample spectrum
-        return output
+        # Output is tuple of 3D arrays: (Naccum, Nchannel+.., Nfreq)
+        return (sample_spectrum,BB_spectrum)
 
     except:
 
