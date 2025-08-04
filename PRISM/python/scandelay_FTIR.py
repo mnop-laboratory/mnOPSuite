@@ -1706,14 +1706,21 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                         phase_offset=0,smoothing=None, valid_thresh=.01,
                         piecewise_flattening=0,
                         zero_phase_interval=None,
-                        channel=1,channel_ref=1,channel_BB=1,
+                        channel=1,channel_ref=1,
+                        self_reference=False,channel_BB=1,
                         phase_alignment_exponent=0.25,
                         **kwargs):
 
     sample_spectra = standardize_spectrum_shape(sample_spectra)
     sample_BB_spectra = standardize_spectrum_shape(sample_BB_spectra)
-    ref_spectra = standardize_spectrum_shape(ref_spectra)
-    ref_BB_spectra = standardize_spectrum_shape(ref_BB_spectra)
+
+    # In case we want to normalize one sample channel to another, we use `self_reference=True`
+    if self_reference:
+        ref_spectra=sample_spectra
+        ref_BB_spectra = sample_BB_spectra
+    else:
+        ref_spectra = standardize_spectrum_shape(ref_spectra)
+        ref_BB_spectra = standardize_spectrum_shape(ref_BB_spectra)
 
     try:
         SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
@@ -1776,7 +1783,8 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                         phase_offset=0, smoothing=None, valid_thresh=.01,
                         piecewise_flattening=0,
                         zero_phase_interval=None,
-                        channel=1,channel_ref=1,channel_BB=1,
+                        channel=1,channel_ref=1,
+                        self_referene=False, channel_BB=1,
                         heal_linescan=False,
                         phase_alignment_exponent=0.25,
                         subtract_baseline=False,
@@ -1803,6 +1811,10 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
             print('Processing linescan pixel %i of %i...'%(i+1,len(sample_linescan)))
             sample_spectra = sample_linescan[i]
 
+            if self_reference:
+                ref_spectra = sample_spectra
+                ref_BB_spectra = sample_BB_spectra
+
             #--- Compute normalized spectrum at this pixel
             if SP is None: # Initialize spectral processor
                 SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
@@ -1810,6 +1822,9 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                                        phase_alignment_exponent=phase_alignment_exponent)
             else:
                 SP.sample_spectra = sample_spectra #re-set sample spectra, only
+                # Here we are updating the reference spectrum locally, too
+                if self_reference:
+                    SP.ref_spectra = ref_spectra
 
             f, snorm_abs, snorm = SP(channel=channel,channel_ref=channel_ref,channel_BB=channel_BB,
                                      apply_envelope=apply_envelope, envelope_width=envelope_width,
