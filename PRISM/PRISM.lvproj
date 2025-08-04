@@ -117,6 +117,8 @@
 		<Item Name="Control_LineScanRemoteControl.ctl" Type="VI" URL="../Control_LineScanRemoteControl.ctl"/>
 		<Item Name="AutoRepScan.vi" Type="VI" URL="../AutoRepScan.vi"/>
 		<Item Name="Control_AutoRepScan.ctl" Type="VI" URL="../Control_AutoRepScan.ctl"/>
+		<Item Name="Untitled 1.vi" Type="VI" URL="../../../Sandbox/Untitled 1.vi"/>
+		<Item Name="Untitled 2.vi" Type="VI" URL="../../../Sandbox/Untitled 2.vi"/>
 		<Item Name="Dependencies" Type="Dependencies">
 			<Item Name="vi.lib" Type="Folder">
 				<Item Name="Check Color Table Size.vi" Type="VI" URL="/&lt;vilib&gt;/picture/jpeg.llb/Check Color Table Size.vi"/>

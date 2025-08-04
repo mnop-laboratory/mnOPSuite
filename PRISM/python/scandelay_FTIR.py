@@ -394,7 +394,7 @@ def fit_envelope(f,sabs):
     f0_2 = 2*f0
     ind2 = np.argmin(np.abs(f-f0_2))
     A_2 = sabs[ind2]
-    if A_2/A > 0.02:
+    if A_2/A > .5: # What should this threshold be?
         f0=f0_2
         A=A_2
         print('Picking higher peak!')
@@ -1150,8 +1150,8 @@ class SpectralProcessor(object):
         assert len(ref_spectra) == len(ref_BB_spectra), \
             "`ref_spectra` and `ref_BB_spectra` should have the same number of accumulations."
 
-        assert sample_spectra.shape[1] == ref_spectra.shape[1], \
-            "`sample_spectra` and `ref_spectra` must have the same number of channels!"
+        #assert sample_spectra.shape[1] == ref_spectra.shape[1], \
+        #    "`sample_spectra` and `ref_spectra` must have the same number of channels!"
 
         self.sample_spectra = np.array(sample_spectra)
         self.sample_BB_spectra = np.array(sample_BB_spectra)
@@ -1400,7 +1400,7 @@ class SpectralProcessor(object):
         return self.f_norm, self.norm_spectrum_abs, self.norm_spectrum
 
 
-def accumulate_spectra(spectra, channel=1, apply_envelope=True, expand_envelope=1):
+def accumulate_spectra(spectra, apply_envelope=True, expand_envelope=1, channel=1):
 
     try:
         return SpectralProcessor.accumulate_spectra(spectra,
@@ -1703,11 +1703,11 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                         ref_spectra, ref_BB_spectra,
                         apply_envelope=True, envelope_width=1.5,
                         level_phase=False, align_phase=True,
-                        phase_alignment_exponent=0.25,
                         phase_offset=0,smoothing=None, valid_thresh=.01,
                         piecewise_flattening=0,
                         zero_phase_interval=None,
                         channel=1,channel_ref=1,channel_BB=1,
+                        phase_alignment_exponent=0.25,
                         **kwargs):
 
     sample_spectra = standardize_spectrum_shape(sample_spectra)
