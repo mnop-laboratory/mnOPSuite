@@ -1185,7 +1185,7 @@ class SpectralProcessor(object):
                          smoothing=None,
                          window=None,
                          align_phase=True,
-                         BB_normalize=True,
+                         BB_normalize=False,
                          BB_phase=False,
                          view_phase_alignment=False,
                          view_phase_alignment_leveling=6):
@@ -1318,7 +1318,7 @@ class SpectralProcessor(object):
                  smoothing=None,window=None,
                  view_phase_alignment=False,
                  view_phase_alignment_leveling=6,
-                 BB_normalize=True,BB_phase=False,
+                 BB_normalize=False,BB_phase=False,
                  recompute_reference=True,
                  **kwargs):
         """This normalizes sample and reference spectra to their
@@ -1709,6 +1709,7 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                         channel=1,channel_ref=1,
                         self_reference=False,channel_BB=1,
                         phase_alignment_exponent=0.25,
+                        BB_normalize=False,
                         **kwargs):
 
     sample_spectra = standardize_spectrum_shape(sample_spectra)
@@ -1734,6 +1735,7 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
                                 window=False,
                                 align_phase=align_phase,
                                 view_phase_alignment=False,
+                                BB_normalize=BB_normalize,
                                 **kwargs)
 
         phase = SP.get_phase(f, snorm, level=False,
@@ -1784,11 +1786,11 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                         piecewise_flattening=0,
                         zero_phase_interval=None,
                         channel=1,channel_ref=1,
-                        self_referene=False, channel_BB=1,
+                        self_reference=False, channel_BB=1,
                         heal_linescan=False,
                         phase_alignment_exponent=0.25,
                         subtract_baseline=False,
-                        BB_normalize=True):
+                        BB_normalize=False):
     # Don't mess with the order of the arguments list, it's sensitively tuned for LabView!
 
     global SP
@@ -1820,11 +1822,16 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                 SP = SpectralProcessor(sample_spectra, sample_BB_spectra,
                                        ref_spectra, ref_BB_spectra,
                                        phase_alignment_exponent=phase_alignment_exponent)
+                recompute_reference = True
             else:
                 SP.sample_spectra = sample_spectra #re-set sample spectra, only
                 # Here we are updating the reference spectrum locally, too
                 if self_reference:
-                    SP.ref_spectra = ref_spectra
+                    print('Using self referencing for ref spectra!')
+                    SP.ref_spectra = sample_spectra
+                    recompute_reference = True
+                else:
+                    recompute_reference = False #`recompute_reference=False` saves us half our effort, if we haven't changed it!
 
             f, snorm_abs, snorm = SP(channel=channel,channel_ref=channel_ref,channel_BB=channel_BB,
                                      apply_envelope=apply_envelope, envelope_width=envelope_width,
@@ -1834,7 +1841,7 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
                                      align_phase=align_phase,
                                      BB_normalize=BB_normalize,
                                      view_phase_alignment=False,
-                                     recompute_reference=False,) #`recompute_reference=False` saves us half our effort
+                                     recompute_reference=recompute_reference)
 
             #--- Do all the phase leveling
             if level_phase: # We made a choice here not to allow baseline subtraction, keep the leveling "physical"
