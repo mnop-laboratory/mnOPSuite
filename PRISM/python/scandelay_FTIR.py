@@ -394,7 +394,7 @@ def fit_envelope(f,sabs):
     f0_2 = 2*f0
     ind2 = np.argmin(np.abs(f-f0_2))
     A_2 = sabs[ind2]
-    if A_2/A > .5: # What should this threshold be?
+    if A_2/A > .2: # What should this threshold be?  If it is too low, then 2*omega peak may be grabbed instead
         f0=f0_2
         A=A_2
         print('Picking higher peak!')
@@ -1718,7 +1718,7 @@ def normalized_spectrum(sample_spectra, sample_BB_spectra,
     # In case we want to normalize one sample channel to another, we use `self_reference=True`
     if self_reference:
         ref_spectra=sample_spectra
-        ref_BB_spectra = sample_BB_spectra
+        sample_BB_spectra = ref_BB_spectra = sample_spectra # Since `channel_ref` of sample spectrum will be in denominator, it should itself serve as BB
     else:
         ref_spectra = standardize_spectrum_shape(ref_spectra)
         ref_BB_spectra = standardize_spectrum_shape(ref_BB_spectra)
@@ -1815,7 +1815,7 @@ def normalized_linescan(sample_linescan, sample_BB_spectra,
 
             if self_reference:
                 ref_spectra = sample_spectra
-                ref_BB_spectra = sample_BB_spectra
+                ref_BB_spectra = sample_BB_spectra = sample_spectra # Since `channel_ref` of sample spectrum will be in denominator, just use itself as BB for envelope!
 
             #--- Compute normalized spectrum at this pixel
             if SP is None: # Initialize spectral processor
